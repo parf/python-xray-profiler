@@ -217,6 +217,28 @@ class Xray:
         return [json.loads(e) for e in cls._redis.lrange(key, 0, -1)]
 
     @classmethod
+    def json(cls, task_id: str = None) -> dict:
+        """Return sorted entries as a dict ready for JSON serialization."""
+        tid = task_id or cls._tl().task_id
+        entries = cls.entries(tid)
+        entries.sort(key=lambda e: e.get('start') or 0)
+        spans = [e for e in entries if e['type'] == 'span' and e.get('end')]
+        first_start = min((e.get('start') or 9e12) for e in entries) if entries else 0
+        last_end = max((e.get('end') or 0) for e in spans) if spans else first_start
+        total_ms = (last_end - first_start) * 1000 if entries else 0
+        warnings = sum(1 for e in entries if e.get('type') == 'warning')
+        alerts = sum(1 for e in entries if e.get('type') == 'alert')
+        return {
+            'task_id': tid,
+            'total_ms': round(total_ms, 1),
+            'entries': len(entries),
+            'spans': len(spans),
+            'warnings': warnings,
+            'alerts': alerts,
+            'data': entries,
+        }
+
+    @classmethod
     def report(cls, task_id: str = None, file=None):
         """Print execution report to file (default: stdout)."""
         import sys as _sys

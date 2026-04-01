@@ -79,8 +79,7 @@ def profiler_json():
     task_id = request.args.get('k', '')
     if not task_id:
         return jsonify({'error': 'Missing ?k= parameter'}), 400
-    entries = Xray.entries(task_id)
-    return jsonify({'task_id': task_id, 'entries': entries})
+    return jsonify(Xray.json(task_id))
 
 
 # --- Simulated operations ---
