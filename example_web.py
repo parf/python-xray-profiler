@@ -44,6 +44,8 @@ def attach_profiler(response):
     if not task_id:
         return response
 
+    Profiler.finish()  # close root span (before response sent; atexit is fallback)
+
     # HTML responses: inject profiler panel
     if response.content_type and response.content_type.startswith('text/html'):
         delay = int(request.environ.get('profiler_delay_ms', 0))

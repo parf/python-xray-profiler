@@ -32,6 +32,7 @@ Usage:
     Profiler.alert('timeout', {'url': url})
 """
 
+import atexit
 import os
 import sys
 import time
@@ -49,6 +50,7 @@ class Profiler:
     _instant: bool = False
     _start_time: float = 0
     _stack: list = []  # active span names stack (for nesting depth + context)
+    _root_span = None  # auto-created root span
 
     # --- Setup ---
 
@@ -63,8 +65,13 @@ class Profiler:
         cls._instant = instant
         cls._start_time = time.time()
         cls._stack = []
+        cls._root_span = None
         if instant:
             _stderr(f'P[0.0] \033[1minit\033[0m task={task_id}')
+        # Auto-create root span — all subsequent spans are children
+        cls._root_span = cls.i(thread_id or 'PROFILER')
+        cls._root_span.__enter__()
+        atexit.register(cls.finish)
 
     @classmethod
     def init_instant(cls, thread_id: str = None):
@@ -77,10 +84,22 @@ class Profiler:
         cls._instant = True
         cls._start_time = time.time()
         cls._stack = []
+        cls._root_span = None
         _stderr(f'P[0.0] \033[1minit\033[0m instant')
+        cls._root_span = cls.i(thread_id or 'PROFILER')
+        cls._root_span.__enter__()
+        atexit.register(cls.finish)
+
+    @classmethod
+    def finish(cls):
+        """Close root span. Call at end of task/request."""
+        if cls._root_span:
+            cls._root_span.__exit__(None, None, None)
+            cls._root_span = None
 
     @classmethod
     def disable(cls):
+        cls.finish()
         cls._enabled = False
 
     # --- Spans (with duration) ---
