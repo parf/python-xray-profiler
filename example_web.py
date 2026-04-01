@@ -68,7 +68,7 @@ def profiler_view():
     if not task_id:
         return 'Missing ?k= parameter', 400
     html = render_from_redis(task_id, r)
-    return Response(html, content_type='text/html')
+    return Response(html, content_type='text/html; charset=utf-8')
 
 
 # --- Simulated operations ---
