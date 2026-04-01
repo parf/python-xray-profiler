@@ -134,12 +134,30 @@ P[15.3] out DB::query 15.2ms
 
 Nested spans are indented. `in` lines are bold, `out` lines are dimmed.
 
-## Example
+## Examples
+
+### CLI (multiprocess)
 
 ```bash
-python3 example_multiprocess.py --default    # 3 workers + report
-python3 example_multiprocess.py --instant    # real-time stderr
+python3 example_multiprocess.py --default    # 3 workers + Redis report
+python3 example_multiprocess.py --instant    # real-time stderr output
 ```
+
+### Web (Flask)
+
+```bash
+pip3 install flask redis
+python3 example_web.py
+```
+
+Open http://localhost:5000/ — auto-profiled page with execution panel at the bottom.
+
+| URL | Description |
+|-----|-------------|
+| `/` | Single-process demo with DB, ES, API, AI calls |
+| `/threaded` | Multi-worker demo (two iframe workers share task-id) |
+| `/api/search?q=miami` | JSON API (profiler key in `X-Xray-Key` header) |
+| `/_profiler?k=KEY` | Standalone HTML report |
 
 ## See Also
 
