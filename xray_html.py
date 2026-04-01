@@ -1,5 +1,5 @@
 """
-HTML renderer for Python Profiler.
+HTML renderer for Python Xray.
 
 Renders profiler entries as a styled HTML table (Call Tree format).
 Two modes:
@@ -290,7 +290,7 @@ def render(entries: list, task_id: str = '') -> str:
 
 
 def render_from_redis(task_id: str, redis_client) -> str:
-    entries = [json.loads(e) for e in redis_client.lrange(f'profiler:{task_id}', 0, -1)]
+    entries = [json.loads(e) for e in redis_client.lrange(f'xray:{task_id}', 0, -1)]
     return render(entries, task_id)
 
 

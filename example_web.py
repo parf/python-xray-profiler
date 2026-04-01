@@ -20,8 +20,8 @@ from uuid import uuid4
 import redis
 from flask import Flask, Response, request, jsonify
 
-from profiler import Profiler
-from profiler_html import render_from_redis, snippet
+from xray import Xray
+from xray_html import render_from_redis, snippet
 
 app = Flask(__name__)
 r = redis.Redis(host='redis')
@@ -35,7 +35,7 @@ def start_profiler():
         return  # profiler endpoint + worker iframes handle their own init
     task_id = f'web-{uuid4().hex[:8]}'
     request.environ['profiler_task_id'] = task_id
-    Profiler.init(r, task_id, context={'method': request.method, 'path': request.path})
+    Xray.init(r, task_id, context={'method': request.method, 'path': request.path})
 
 
 @app.after_request
@@ -44,13 +44,13 @@ def attach_profiler(response):
     if not task_id:
         return response
 
-    Profiler.finish()  # close root span (before response sent; atexit is fallback)
+    Xray.finish()  # close root span (before response sent; atexit is fallback)
 
     # HTML responses: inject profiler panel
     if response.content_type and response.content_type.startswith('text/html'):
         delay = int(request.environ.get('profiler_delay_ms', 0))
         wait = bool(request.environ.get('profiler_wait_iframes', False))
-        elapsed = (time.time() - Profiler._tl().start_time) * 1000 if Profiler._tl().start_time else 0
+        elapsed = (time.time() - Xray._tl().start_time) * 1000 if Xray._tl().start_time else 0
         html = snippet(task_id, delay_ms=delay, wait_iframes=wait, elapsed_ms=elapsed)
         response.data = response.data.replace(b'</body>', html.encode() + b'</body>')
 
@@ -74,7 +74,7 @@ def profiler_view():
 # --- Simulated operations ---
 
 def sim_db_query(table, where=None):
-    with Profiler.i('DB::query', {'table': table, 'where': where}) as span:
+    with Xray.i('DB::query', {'table': table, 'where': where}) as span:
         time.sleep(random.uniform(0.01, 0.04))
         rows = random.randint(5, 200)
         span.data({'rows': rows})
@@ -82,7 +82,7 @@ def sim_db_query(table, where=None):
 
 
 def sim_es_search(index, query):
-    with Profiler.i('ES::search', {'index': index, 'query': query}) as span:
+    with Xray.i('ES::search', {'index': index, 'query': query}) as span:
         time.sleep(random.uniform(0.02, 0.06))
         hits = random.randint(0, 500)
         span.data({'hits': hits})
@@ -97,7 +97,7 @@ def sim_ai_classify(text):
         'temperature': 0.3,
         'max_tokens': 512,
     }
-    with Profiler.i('AI::classify', {'request': req}) as span:
+    with Xray.i('AI::classify', {'request': req}) as span:
         time.sleep(random.uniform(0.05, 0.15))
         resp = {
             'category': 'office',
@@ -115,9 +115,9 @@ def sim_ai_classify(text):
 def sim_cache_lookup(key):
     hit = random.random() > 0.3
     if hit:
-        Profiler.info('cache-hit', {'key': key})
+        Xray.info('cache-hit', {'key': key})
     else:
-        Profiler.info('cache-miss', {'key': key})
+        Xray.info('cache-miss', {'key': key})
     return hit
 
 
@@ -125,38 +125,38 @@ def sim_cache_lookup(key):
 
 @app.route('/')
 def index():
-    with Profiler.i('page::index'):
-        Profiler.info('request-start', {'ip': request.remote_addr, 'ua': request.user_agent.string[:60]})
+    with Xray.i('page::index'):
+        Xray.info('request-start', {'ip': request.remote_addr, 'ua': request.user_agent.string[:60]})
 
         sim_cache_lookup('page:index')
         listings = sim_db_query('listings', 'state=FL')
         results = sim_es_search('listing', 'miami office')
 
-        with Profiler.i('API::enrich', {'listing_id': 12228396, 'source': 'resites'}):
-            with Profiler.i('API::geocode', {'address': '553 G St, Chula Vista, CA 91910', 'provider': 'google'}) as geo:
+        with Xray.i('API::enrich', {'listing_id': 12228396, 'source': 'resites'}):
+            with Xray.i('API::geocode', {'address': '553 G St, Chula Vista, CA 91910', 'provider': 'google'}) as geo:
                 time.sleep(random.uniform(0.005, 0.02))
                 geo.data({'lat': 32.6401, 'lon': -117.0842, 'confidence': 0.98, 'cached': False})
-            with Profiler.i('API::classify', {'property_type': 'Commercial Sale', 'sqft': 5900, 'price': 1250000, 'categories': ['restaurant', 'retail']}) as cls:
+            with Xray.i('API::classify', {'property_type': 'Commercial Sale', 'sqft': 5900, 'price': 1250000, 'categories': ['restaurant', 'retail']}) as cls:
                 time.sleep(random.uniform(0.005, 0.015))
                 cls.data({'result': 'restaurant', 'confidence': 0.87, 'is_business': True})
 
         classification = sim_ai_classify('Office space in Miami')
 
-        Profiler.warning('slow-query', {'ms': 320})
-        Profiler.alert('connection-timeout', {'host': 'es-cluster', 'after_ms': 5000})
+        Xray.warning('slow-query', {'ms': 320})
+        Xray.alert('connection-timeout', {'host': 'es-cluster', 'after_ms': 5000})
 
-        with Profiler.i('render::template'):
+        with Xray.i('render::template'):
             time.sleep(random.uniform(0.005, 0.015))
 
-        Profiler.info('request-done')
+        Xray.info('request-done')
 
     task_id = request.environ['profiler_task_id']
 
     return f'''<!DOCTYPE html>
 <html>
-<head><title>Profiler Web Example</title></head>
+<head><title>Xray Web Demo</title></head>
 <body style="font-family: -apple-system, sans-serif; padding: 20px 40px; background: #f5f5f5; margin-bottom: 60vh; max-width: 800px; line-height: 1.6">
-    <h1>📊 Python Profiler — Web Demo</h1>
+    <h1>📊 Xray — Web Demo</h1>
 
     <p>Welcome! This page is <b>auto-profiled</b>. Every database query, API call, and cache lookup
     is tracked and timed. Look at the <b>panel at the bottom</b> of the screen — that's the
@@ -195,8 +195,8 @@ def index():
 
 @app.route('/threaded')
 def threaded():
-    with Profiler.i('page::threaded'):
-        Profiler.info('request-start', {'ip': request.remote_addr})
+    with Xray.i('page::threaded'):
+        Xray.info('request-start', {'ip': request.remote_addr})
         sim_cache_lookup('page:threaded')
         listings = sim_db_query('listings', 'state=NY')
         results = sim_es_search('listing', 'boston warehouse')
@@ -206,7 +206,7 @@ def threaded():
 
     return f'''<!DOCTYPE html>
 <html>
-<head><title>Profiler — Multi-Worker</title></head>
+<head><title>Xray — Multi-Worker</title></head>
 <body style="font-family: sans-serif; padding: 20px; background: #f5f5f5; margin-bottom: 60vh">
     <h1>📊 Multi-Worker Example</h1>
     <p>Two background workers share the same profiler task-id. Panel loads after 4s.</p>
@@ -230,11 +230,11 @@ def threaded():
 def api_search():
     q = request.args.get('q', 'commercial real estate')
 
-    with Profiler.i('api::search', {'query': q}):
+    with Xray.i('api::search', {'query': q}):
         sim_cache_lookup(f'search:{q}')
         results = sim_es_search('listing', q)
 
-        with Profiler.i('enrich'):
+        with Xray.i('enrich'):
             for i in range(min(3, results['hits'])):
                 sim_db_query('listing_details', f'id={i}')
 
@@ -243,7 +243,7 @@ def api_search():
         else:
             classification = None
 
-        Profiler.warning('slow-upstream', {'latency_ms': random.randint(80, 300)})
+        Xray.warning('slow-upstream', {'latency_ms': random.randint(80, 300)})
 
     return jsonify({
         'query': q,
@@ -261,34 +261,34 @@ def worker_iframe():
     if not task_id:
         return 'Missing task_id', 400
 
-    Profiler.init(r, task_id, thread_id=worker_name, context={'worker': worker_name})
+    Xray.init(r, task_id, thread_id=worker_name, context={'worker': worker_name})
 
-    with Profiler.i(f'{worker_name}::run'):
+    with Xray.i(f'{worker_name}::run'):
         # Simulate worker doing its own DB + API work
         sim_db_query('worker_queue', f'worker={worker_name}')
 
-        with Profiler.i(f'{worker_name}::process'):
+        with Xray.i(f'{worker_name}::process'):
             time.sleep(random.uniform(0.3, 0.8))
 
             if worker_name == 'enricher':
-                with Profiler.i('Geo::batch_geocode', {'count': 25}) as span:
+                with Xray.i('Geo::batch_geocode', {'count': 25}) as span:
                     time.sleep(random.uniform(0.2, 0.5))
                     span.data({'resolved': 23, 'failed': 2})
-                Profiler.info('enricher-checkpoint', {'processed': 25})
+                Xray.info('enricher-checkpoint', {'processed': 25})
 
             elif worker_name == 'classifier':
                 sim_ai_classify('Warehouse with loading dock in Boston industrial district near I-93')
                 sim_es_search('listing', 'similar:warehouse:boston')
-                Profiler.warning('model-fallback', {'primary': 'gpt-4o', 'fallback': 'gpt-4o-mini', 'reason': 'rate-limited'})
+                Xray.warning('model-fallback', {'primary': 'gpt-4o', 'fallback': 'gpt-4o-mini', 'reason': 'rate-limited'})
 
-        Profiler.info(f'{worker_name}::done')
+        Xray.info(f'{worker_name}::done')
 
-    Profiler.finish()
+    Xray.finish()
     return f'<html><body style="font:11px monospace;color:#888">✓ {worker_name} done</body></html>'
 
 
 if __name__ == '__main__':
-    print('Profiler Web Example')
+    print('Xray Web Demo')
     print('  http://localhost:5000/')
     print('  http://localhost:5000/api/search?q=miami+office')
     print()

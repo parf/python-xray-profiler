@@ -5,7 +5,7 @@ Implementation details, Redis format, and architecture.
 ## Redis Storage
 
 ```
-Key:  profiler:{task_id}    (Redis LIST)
+Key:  xray:{task_id}    (Redis LIST)
 TTL:  1 hour (auto-set on each push)
 Each element: JSON string
 ```
@@ -21,7 +21,7 @@ Each element: JSON string
   "start": 1711900000.123,                // unix timestamp (float)
   "end": 1711900000.456,                  // null for info/warning/alert
   "data": {"query": "miami", "count": 150},
-  "context": {"user_id": 42},             // from Profiler.init(context=...)
+  "context": {"user_id": 42},             // from Xray.init(context=...)
   "caller": [                             // call stack (up to 3 frames)
     "app/tasks.py:45 search_listings()",
     "app/es.py:120 search()",
@@ -51,7 +51,7 @@ Duration = `end - start` (computed by reader, not stored).
 
 ## Stack Tracking
 
-`Profiler._stack` (list of span names) tracks nesting depth:
+`Xray._stack` (list of span names) tracks nesting depth:
 - `ProfilerSpan.__enter__` → push name
 - `ProfilerSpan.__exit__` → pop name
 - `_push()` reads `len(_stack)` → stored as `depth` in entry
@@ -78,7 +78,7 @@ P[15.2] out DB::query 15.2ms
 
 ## Report Format
 
-`Profiler.report()` reads Redis entries and prints:
+`Xray.report()` reads Redis entries and prints:
 - Header with totals
 - Per-thread sections with indented outline
 - Color-coded durations: green < 50ms, yellow 50-100ms, red > 100ms
@@ -90,19 +90,19 @@ P[15.2] out DB::query 15.2ms
 
 From Python:
 ```python
-entries = Profiler.entries('task-id')
+entries = Xray.entries('task-id')
 ```
 
 Raw Redis:
 ```bash
-redis-cli LRANGE profiler:task-id 0 -1
+redis-cli LRANGE xray:task-id 0 -1
 ```
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `profiler.py` | Core module |
+| `xray.py` | Core module |
 | `README.md` | User documentation |
-| `PROFILER-internals.md` | This file |
+| `XRAY-internals.md` | This file |
 | `example_multiprocess.py` | Multi-process example |

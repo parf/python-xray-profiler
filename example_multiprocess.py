@@ -18,7 +18,7 @@ import time
 
 import redis
 
-from profiler import Profiler
+from xray import Xray
 
 REDIS_HOST = 'redis'
 TASK_ID = f'example-{int(time.time())}'
@@ -28,32 +28,32 @@ INSTANT = '--instant' in sys.argv
 def worker(worker_id: int, instant: bool = False):
     """Simulates a Celery worker doing mixed work."""
     if instant:
-        Profiler.init_instant(thread_id=f'worker-{worker_id}')
+        Xray.init_instant(thread_id=f'worker-{worker_id}')
     else:
         r = redis.Redis(host=REDIS_HOST)
-        Profiler.init(r, TASK_ID, thread_id=f'worker-{worker_id}', context={'worker': worker_id})
+        Xray.init(r, TASK_ID, thread_id=f'worker-{worker_id}', context={'worker': worker_id})
 
-    Profiler.info('worker-start', {'pid': multiprocessing.current_process().pid})
+    Xray.info('worker-start', {'pid': multiprocessing.current_process().pid})
 
     # Simulate DB query
-    with Profiler.i('DB::query', {'table': 'listings', 'state': 'FL'}) as span:
+    with Xray.i('DB::query', {'table': 'listings', 'state': 'FL'}) as span:
         time.sleep(random.uniform(0.01, 0.05))
         span.data({'rows': random.randint(10, 500)})
 
     # Simulate ES search
-    with Profiler.i('ES::search', {'index': 'listing'}) as span:
+    with Xray.i('ES::search', {'index': 'listing'}) as span:
         time.sleep(random.uniform(0.02, 0.08))
         span.data({'hits': random.randint(0, 1000)})
 
     # Simulate API call with nested spans
-    with Profiler.i('API::enrich'):
-        with Profiler.i('API::geocode'):
+    with Xray.i('API::enrich'):
+        with Xray.i('API::geocode'):
             time.sleep(random.uniform(0.005, 0.02))
-        with Profiler.i('API::classify'):
+        with Xray.i('API::classify'):
             time.sleep(random.uniform(0.005, 0.015))
 
     # Decorator example
-    @Profiler.profile()
+    @Xray.profile()
     def process_batch(n):
         time.sleep(random.uniform(0.01, 0.03))
         return n * 2
@@ -61,18 +61,18 @@ def worker(worker_id: int, instant: bool = False):
     process_batch(100)
 
     # Closure wrapper
-    Profiler.wrap(lambda: time.sleep(random.uniform(0.005, 0.01)), 'cache::warm')
+    Xray.wrap(lambda: time.sleep(random.uniform(0.005, 0.01)), 'cache::warm')
 
     # AI call with request/response
-    with Profiler.i('AI::classify', {'request': {'text': 'Office space in Miami', 'model': 'gpt-4o-mini'}}) as span:
+    with Xray.i('AI::classify', {'request': {'text': 'Office space in Miami', 'model': 'gpt-4o-mini'}}) as span:
         time.sleep(random.uniform(0.05, 0.15))
         span.data({'response': {'category': 'office', 'confidence': 0.95, 'tokens': 142}})
 
     # Info points
-    Profiler.warning('slow-query', {'ms': 320})
-    Profiler.alert('connection-timeout', {'host': 'es-cluster', 'after_ms': 5000})
+    Xray.warning('slow-query', {'ms': 320})
+    Xray.alert('connection-timeout', {'host': 'es-cluster', 'after_ms': 5000})
 
-    Profiler.info('worker-done')
+    Xray.info('worker-done')
 
 
 if __name__ == '__main__':
@@ -102,9 +102,9 @@ if __name__ == '__main__':
             p.join()
         print('All workers done.')
         # Connect profiler to Redis for report
-        Profiler.init(redis.Redis(host=REDIS_HOST), TASK_ID)
+        Xray.init(redis.Redis(host=REDIS_HOST), TASK_ID)
 
     # Print report + cleanup
-    if Profiler._redis:
-        Profiler.report()
-        Profiler._redis.delete(f'profiler:{TASK_ID}')
+    if Xray._redis:
+        Xray.report()
+        Xray._redis.delete(f'xray:{TASK_ID}')

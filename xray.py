@@ -1,35 +1,35 @@
 """
-Redis-backed Profiler for Python (Celery-aware)
+Xray — lightweight Python profiler with Redis storage
 
-Analog of PHP Profiler::i() — tracks execution time, call sites,
-and custom data. Stores entries in Redis list per task-id.
+Tracks execution time, call sites, and custom data.
+Optional support for distributed tasks (Celery, multiprocessing).
 
 Usage:
-    from profiler import Profiler
+    from xray import Xray
     import redis
 
     # Redis mode — store in Redis list
-    Profiler.init(redis.Redis(), 'task-123', context={'user_id': 42})
+    Xray.init(redis.Redis(), 'task-123', context={'user_id': 42})
 
     # Instant mode — echo to stderr (like PHP --profiler=echo)
-    Profiler.init_instant()
+    Xray.init_instant()
 
     # Context manager (span with duration)
-    with Profiler.i('ES::search', {'query': q}) as span:
+    with Xray.i('ES::search', {'query': q}) as span:
         results = es.search(q)
         span.data({'count': len(results)})
 
     # Decorator
-    @Profiler.profile()
+    @Xray.profile()
     def find_listings(params): ...
 
     # Closure wrapper
-    result = Profiler.wrap(lambda: api_call(url), 'API::call', {'url': url})
+    result = Xray.wrap(lambda: api_call(url), 'API::call', {'url': url})
 
     # Info points (no duration)
-    Profiler.info('cache-hit', {'key': k})
-    Profiler.warning('rate-limit', {'remaining': 5})
-    Profiler.alert('timeout', {'url': url})
+    Xray.info('cache-hit', {'key': k})
+    Xray.warning('rate-limit', {'remaining': 5})
+    Xray.alert('timeout', {'url': url})
 """
 
 import atexit
@@ -41,7 +41,7 @@ import inspect
 import threading
 
 
-class Profiler:
+class Xray:
     # Shared (safe across threads)
     _redis = None
 
@@ -153,7 +153,7 @@ class Profiler:
 
     @classmethod
     def profile(cls, name: str = None):
-        """Decorator: @Profiler.profile() or @Profiler.profile('custom-name')"""
+        """Decorator: @Xray.profile() or @Xray.profile('custom-name')"""
         def decorator(fn):
             label = name or fn.__qualname__
             def wrapper(*args, **kwargs):
@@ -168,7 +168,7 @@ class Profiler:
 
     @classmethod
     def wrap(cls, fn, name: str = None, data: dict = None):
-        """Wrap a callable: result = Profiler.wrap(lambda: slow_call(), 'name')"""
+        """Wrap a callable: result = Xray.wrap(lambda: slow_call(), 'name')"""
         label = name or (fn.__qualname__ if hasattr(fn, '__qualname__') else 'closure')
         with cls.i(label, data):
             return fn()
@@ -180,7 +180,7 @@ class Profiler:
         """Read all profiler entries from Redis for a task."""
         if not cls._redis:
             return []
-        key = f'profiler:{task_id or cls._tl().task_id}'
+        key = f'xray:{task_id or cls._tl().task_id}'
         return [json.loads(e) for e in cls._redis.lrange(key, 0, -1)]
 
     @classmethod
@@ -208,7 +208,7 @@ class Profiler:
         total_ms = (last_end - first_start) * 1000
 
         out.write(f'\n\033[1m{"━" * 70}\033[0m\n')
-        out.write(f'  \033[1m📊 Profiler Report:\033[0m {tid}\n')
+        out.write(f'  \033[1m📊 Xray Report:\033[0m {tid}\n')
         out.write(f'  Entries: {len(entries)} ({len(spans)} spans, {len(infos)} info)\n')
         out.write(f'  Workers: {len(threads)}\n')
         out.write(f'  Total span time: \033[1m{total_ms:.1f}ms\033[0m\n')
@@ -268,13 +268,13 @@ class Profiler:
     @classmethod
     def html_report(cls, task_id: str = None) -> str:
         """Render HTML profiler report."""
-        from profiler_html import render_from_redis
+        from xray_html import render_from_redis
         return render_from_redis(task_id or cls._tl().task_id, cls._redis)
 
     @classmethod
     def html_snippet(cls, endpoint: str = '/_profiler') -> str:
         """JS snippet to inject into HTML page (async fetch + embed)."""
-        from profiler_html import snippet
+        from xray_html import snippet
         return snippet(cls._tl().task_id, endpoint)
 
     # --- Internal ---
@@ -295,7 +295,7 @@ class Profiler:
             'context': cls._tl().default_context,
             'caller': _caller_stack(3),
         }
-        key = f'profiler:{cls._tl().task_id}'
+        key = f'xray:{cls._tl().task_id}'
         cls._redis.rpush(key, json.dumps(entry, default=str))
         cls._redis.expire(key, 3600)
 
