@@ -25,6 +25,10 @@ def _fmt_val(v) -> str:
     if isinstance(v, float):
         return f'<span class="v-int">{v}</span>'
     if isinstance(v, str):
+        if len(v) > 80:
+            short = _esc(v[:80])
+            full = _esc(v[80:])
+            return f'<span class="v-str">{short}<span class="v-ellipsis" title="{full}">…</span></span>'
         return f'<span class="v-str">{_esc(v)}</span>'
     # array, dict — render as JSON
     return f'<span class="v-json">{_esc(json.dumps(v, separators=(", ", ": "), default=str))}</span>'
@@ -109,6 +113,7 @@ CSS = '''
 .profiler-report .truncated.expanded { word-break: break-all; }
 .profiler-report .expand-btn { color: #4fc3f7; cursor: pointer; font-size: 11px; user-select: none; }
 .profiler-report .v-str { color: #6a9955; font-size: 11px; }
+.profiler-report .v-ellipsis { color: #e88; cursor: help; font-weight: bold; }
 .profiler-report .v-int { color: #098658; }
 .profiler-report .v-bool { color: #569cd6; }
 .profiler-report .v-null { color: #aaa; font-style: italic; }

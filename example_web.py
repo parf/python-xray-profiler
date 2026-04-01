@@ -127,11 +127,13 @@ def index():
         listings = sim_db_query('listings', 'state=FL')
         results = sim_es_search('listing', 'miami office')
 
-        with Profiler.i('API::enrich'):
-            with Profiler.i('API::geocode'):
+        with Profiler.i('API::enrich', {'listing_id': 12228396, 'source': 'resites'}):
+            with Profiler.i('API::geocode', {'address': '553 G St, Chula Vista, CA 91910', 'provider': 'google'}) as geo:
                 time.sleep(random.uniform(0.005, 0.02))
-            with Profiler.i('API::classify'):
+                geo.data({'lat': 32.6401, 'lon': -117.0842, 'confidence': 0.98, 'cached': False})
+            with Profiler.i('API::classify', {'property_type': 'Commercial Sale', 'sqft': 5900, 'price': 1250000, 'categories': ['restaurant', 'retail']}) as cls:
                 time.sleep(random.uniform(0.005, 0.015))
+                cls.data({'result': 'restaurant', 'confidence': 0.87, 'is_business': True})
 
         classification = sim_ai_classify('Office space in Miami')
 
