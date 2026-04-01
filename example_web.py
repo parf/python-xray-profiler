@@ -49,7 +49,8 @@ def attach_profiler(response):
     # HTML responses: inject profiler panel
     if response.content_type and response.content_type.startswith('text/html'):
         delay = int(request.environ.get('profiler_delay_ms', 0))
-        html = snippet(task_id, delay_ms=delay)
+        wait = bool(request.environ.get('profiler_wait_iframes', False))
+        html = snippet(task_id, delay_ms=delay, wait_iframes=wait)
         response.data = response.data.replace(b'</body>', html.encode() + b'</body>')
 
     # JSON/API responses: add profiler key as header
@@ -178,7 +179,7 @@ def threaded():
         results = sim_es_search('listing', 'boston warehouse')
 
     task_id = request.environ['profiler_task_id']
-    request.environ['profiler_delay_ms'] = 4000  # wait for iframe workers
+    request.environ['profiler_wait_iframes'] = True  # load profiler after all iframes done
 
     return f'''<!DOCTYPE html>
 <html>

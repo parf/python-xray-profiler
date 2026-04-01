@@ -294,7 +294,26 @@ def render_from_redis(task_id: str, redis_client) -> str:
     return render(entries, task_id)
 
 
-def snippet(task_id: str, endpoint: str = '/_profiler', delay_ms: int = 0) -> str:
+def _snippet_load_strategy(delay_ms: int, wait_iframes: bool) -> str:
+    if wait_iframes:
+        return '''var iframes = document.querySelectorAll("iframe");
+    var pending = iframes.length;
+    if (pending === 0) { loadProfiler(); }
+    else {
+        iframes.forEach(function(f) {
+            f.addEventListener("load", function() {
+                pending--;
+                if (pending <= 0) loadProfiler();
+            });
+        });
+        setTimeout(loadProfiler, 10000);
+    }'''
+    if delay_ms:
+        return f'setTimeout(loadProfiler, {delay_ms});'
+    return 'loadProfiler();'
+
+
+def snippet(task_id: str, endpoint: str = '/_profiler', delay_ms: int = 0, wait_iframes: bool = False) -> str:
     return f'''
 <div id="profiler-container" style="position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow:auto;z-index:99999;box-shadow:0 -2px 10px rgba(0,0,0,0.3)">
     <div id="profiler-bar" style="background:#f88;padding:2px 8px;font:bold 12px monospace;color:#fff;cursor:pointer;text-align:right">
@@ -315,7 +334,7 @@ def snippet(task_id: str, endpoint: str = '/_profiler', delay_ms: int = 0) -> st
             .then(function(r) {{ return r.text(); }})
             .then(function(html) {{ document.getElementById("profiler-body").innerHTML = html; }});
     }}
-    {f'setTimeout(loadProfiler, {delay_ms});' if delay_ms else 'loadProfiler();'}
+    {_snippet_load_strategy(delay_ms, wait_iframes)}
     document.addEventListener("click", function(e) {{
         if (e.target.classList.contains("expand-btn")) {{
             var t = document.getElementById(e.target.getAttribute("data-target"));
