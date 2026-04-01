@@ -44,6 +44,7 @@ import threading
 class Xray:
     # Shared (safe across threads)
     _redis = None
+    TTL = 3600  # Redis key expiry (seconds), override via init(ttl=)
 
     # Per-thread state (each thread/request gets its own)
     _local = threading.local()
@@ -65,8 +66,10 @@ class Xray:
     # --- Setup ---
 
     @classmethod
-    def init(cls, redis_client, task_id: str = None, thread_id: str = None, instant: bool = False):
+    def init(cls, redis_client, task_id: str = None, thread_id: str = None, instant: bool = False, ttl: int = None):
         """Init profiler for a task. Call once per task/request. task_id auto-generated if not set."""
+        if ttl is not None:
+            cls.TTL = ttl
         from uuid import uuid4
         cls._redis = redis_client
         tl = cls._tl()
@@ -384,7 +387,7 @@ class Xray:
         }
         key = f'xray:{cls._tl().task_id}'
         cls._redis.rpush(key, json.dumps(entry, default=str))
-        cls._redis.expire(key, 3600)
+        cls._redis.expire(key, cls.TTL)
 
 
 class ProfilerSpan:
