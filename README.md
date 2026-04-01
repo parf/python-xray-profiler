@@ -132,11 +132,17 @@ Xray.disable()
 ## Reading Results
 
 ```python
-# Built-in report
+# CLI report (color-coded, grouped by worker)
 Xray.report()                      # current task
 Xray.report('other-task-id')       # specific task
 
-# Raw entries
+# HTML report (Call Tree table)
+html = Xray.html_report()          # returns HTML string
+
+# JSON (sorted entries + summary stats)
+data = Xray.json()                 # {'task_id', 'total_ms', 'entries', 'spans', 'warnings', 'alerts', 'data': [...]}
+
+# Raw entries (unsorted, as stored in Redis)
 entries = Xray.entries()            # list of dicts
 ```
 
