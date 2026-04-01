@@ -12,6 +12,15 @@ Xray traces function calls, measures timing, tracks memory, and captures paramet
 then renders a Call Tree showing exactly what happened, how long each step took,
 and where the bottlenecks are.
 
+### Zero-touch instrumentation
+
+Xray can profile existing code without modifying a single line of source.
+Use `Xray.patch()` to inject profiling into any third-party library, framework,
+or legacy class at runtime — database drivers, HTTP clients, ORM models,
+API wrappers. Just call `Xray.patch(SomeClass, 'method')` at startup and
+every call to that method is automatically traced with timing, call site,
+and parameters. No decorators, no context managers, no refactoring needed.
+
 ### Key features
 
 - `with Xray.i('name')` — context manager spans with duration + call site + memory
@@ -19,6 +28,7 @@ and where the bottlenecks are.
 - decorator (method): `@Xray.profile('name')` — with custom name
 - decorator (class): `@Xray.trace_class()` — auto-profile all public methods
 - decorator (class): `@Xray.trace_class(methods=['find'])` — specific methods only
+- runtime patch: `Xray.patch(AnyClass, 'method')` — instrument existing code without changes
 - `Xray.info()` / `warning()` / `alert()` — events, checkpoints, error markers
 - **Multi-worker** — Redis-backed, thread-safe; multiple processes share one execution trace
 - **Zero overhead** — disabled Xray returns no-op objects, no `if` guards needed
@@ -98,6 +108,31 @@ class Service:
 
 Useful for instrumenting service classes, repositories, and API clients
 without adding `with Xray.i()` to every method.
+
+## Runtime Patching
+
+Inject profiling into any existing class at runtime — no source changes required.
+Works on third-party libraries, framework internals, legacy code.
+
+```python
+from elasticsearch import Elasticsearch
+from myapp.db import DatabasePool
+from myapp.cache import RedisCache
+
+# Single method
+Xray.patch(Elasticsearch, 'search')
+
+# Multiple methods
+Xray.patch(Elasticsearch, ['search', 'index', 'delete'])
+
+# All public methods
+Xray.patch(DatabasePool)
+Xray.patch(RedisCache)
+```
+
+Call `Xray.patch()` once at application startup. Every subsequent call to the
+patched methods is automatically profiled — no decorators, no context managers,
+no changes to the original code.
 
 ## Closure Wrapper
 

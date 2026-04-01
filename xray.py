@@ -197,6 +197,35 @@ class Xray:
             return klass
         return decorator
 
+    # --- Runtime patching ---
+
+    @classmethod
+    def patch(cls, target_class, methods=None):
+        """Monkey-patch an existing class to add profiling — no source code changes needed.
+
+        Xray.patch(Elasticsearch, 'search')                    # single method
+        Xray.patch(Elasticsearch, ['search', 'index'])         # multiple methods
+        Xray.patch(Elasticsearch)                               # all public methods
+        """
+        import functools
+        if isinstance(methods, str):
+            methods = [methods]
+        for attr_name in (methods or list(vars(target_class))):
+            if attr_name.startswith('_'):
+                continue
+            attr = getattr(target_class, attr_name, None)
+            if not callable(attr):
+                continue
+            label = f'{target_class.__name__}.{attr_name}'
+            original = attr
+
+            @functools.wraps(original)
+            def wrapper(*args, _xray_label=label, _xray_fn=original, **kwargs):
+                with cls.i(_xray_label):
+                    return _xray_fn(*args, **kwargs)
+
+            setattr(target_class, attr_name, wrapper)
+
     # --- Closure helper ---
 
     @classmethod

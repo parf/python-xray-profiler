@@ -293,6 +293,79 @@ def test_sort_order():
     cleanup(name)
 
 
+def test_patch_single():
+    name = 'patch-single'
+    cleanup(name)
+    Xray.init(R, tid(name))
+
+    class ExternalLib:
+        def query(self, q): return f'result:{q}'
+        def connect(self): return True
+
+    Xray.patch(ExternalLib, 'query')
+    lib = ExternalLib()
+    result = lib.query('test')
+    lib.connect()
+    Xray.finish()
+
+    ee = entries(name)
+    names = [e['name'] for e in ee if e['type'] == 'span']
+    check('patch: result preserved', result == 'result:test')
+    check('patch: query profiled', 'ExternalLib.query' in names)
+    check('patch: connect NOT profiled', 'ExternalLib.connect' not in names)
+    cleanup(name)
+
+
+def test_patch_multiple():
+    name = 'patch-multi'
+    cleanup(name)
+    Xray.init(R, tid(name))
+
+    class ApiClient:
+        def get(self, url): return 200
+        def post(self, url): return 201
+        def delete(self, url): return 204
+
+    Xray.patch(ApiClient, ['get', 'post'])
+    c = ApiClient()
+    c.get('/users')
+    c.post('/users')
+    c.delete('/users/1')
+    Xray.finish()
+
+    ee = entries(name)
+    names = [e['name'] for e in ee if e['type'] == 'span']
+    check('patch-multi: get profiled', 'ApiClient.get' in names)
+    check('patch-multi: post profiled', 'ApiClient.post' in names)
+    check('patch-multi: delete NOT profiled', 'ApiClient.delete' not in names)
+    cleanup(name)
+
+
+def test_patch_all():
+    name = 'patch-all'
+    cleanup(name)
+    Xray.init(R, tid(name))
+
+    class Service:
+        def find(self): return 1
+        def save(self): return 2
+        def _internal(self): return 3
+
+    Xray.patch(Service)
+    s = Service()
+    s.find()
+    s.save()
+    s._internal()
+    Xray.finish()
+
+    ee = entries(name)
+    names = [e['name'] for e in ee if e['type'] == 'span']
+    check('patch-all: find profiled', 'Service.find' in names)
+    check('patch-all: save profiled', 'Service.save' in names)
+    check('patch-all: _internal skipped', 'Service._internal' not in names)
+    cleanup(name)
+
+
 # === Run ===
 
 if __name__ == '__main__':
@@ -311,6 +384,9 @@ if __name__ == '__main__':
         test_thread_local,
         test_disabled,
         test_sort_order,
+        test_patch_single,
+        test_patch_multiple,
+        test_patch_all,
     ]
 
     for t in tests:
