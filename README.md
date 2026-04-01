@@ -45,7 +45,7 @@ and parameters. No decorators, no context managers, no refactoring needed.
 from xray import Xray
 import redis
 
-Xray.init(redis.Redis(host='redis'), 'my-task-123')
+Xray.init(redis.Redis(host='redis'))  # task_id auto-generated
 
 with Xray.i('ES::search', {'query': q}) as span:
     results = es.search(q)
@@ -150,15 +150,22 @@ Xray.alert('timeout', {'url': url, 'after_ms': 5000})
 
 ```python
 # Redis mode — store entries, read report later
-Xray.init(redis_client, task_id, thread_id=None)
+Xray.init(redis_client)                          # task_id auto-generated
+Xray.init(redis_client, 'my-task-123')           # explicit task_id
+Xray.init(redis_client, thread_id='worker-1')    # explicit thread_id
+
+# Access current task_id
+print(Xray.task_id())                            # 'xray-a1b2c3d4' or 'my-task-123'
 
 # Instant mode — real-time stderr output
 Xray.init_instant()
 
-# Disable
-Xray.disable()
+# Close + disable
+Xray.finish()                                    # close root span (also called by atexit)
+Xray.disable()                                   # finish + disable
 ```
 
+`task_id` auto-generates as `xray-{8 hex chars}` when not provided.
 `thread_id` defaults to `threading.current_thread().name`.
 
 ## Reading Results
