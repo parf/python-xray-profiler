@@ -312,11 +312,12 @@ def _snippet_load_strategy(delay_ms: int, wait_iframes: bool) -> str:
     return 'loadProfiler();'
 
 
-def snippet(task_id: str, endpoint: str = '/_profiler', delay_ms: int = 0, wait_iframes: bool = False) -> str:
+def snippet(task_id: str, endpoint: str = '/_profiler', delay_ms: int = 0, wait_iframes: bool = False, elapsed_ms: float = 0) -> str:
+    time_str = f' | {elapsed_ms:.0f}ms' if elapsed_ms else ''
     return f'''
 <div id="profiler-container" style="position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow:auto;z-index:99999;box-shadow:0 -2px 10px rgba(0,0,0,0.3)">
     <div id="profiler-bar" style="background:#f88;padding:2px 8px;font:bold 12px monospace;color:#fff;cursor:pointer;text-align:right">
-        📊 Profiler: {task_id}
+        📊 Profiler: {task_id}{time_str}
         <a href="{endpoint}?k={task_id}" target="_blank" style="color:#fff;margin-left:8px">open ↗</a>
     </div>
     <div id="profiler-body"></div>

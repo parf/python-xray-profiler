@@ -50,7 +50,8 @@ def attach_profiler(response):
     if response.content_type and response.content_type.startswith('text/html'):
         delay = int(request.environ.get('profiler_delay_ms', 0))
         wait = bool(request.environ.get('profiler_wait_iframes', False))
-        html = snippet(task_id, delay_ms=delay, wait_iframes=wait)
+        elapsed = (time.time() - Profiler._tl().start_time) * 1000 if Profiler._tl().start_time else 0
+        html = snippet(task_id, delay_ms=delay, wait_iframes=wait, elapsed_ms=elapsed)
         response.data = response.data.replace(b'</body>', html.encode() + b'</body>')
 
     # JSON/API responses: add profiler key as header
