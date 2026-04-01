@@ -251,7 +251,8 @@ class Profiler:
                         out.write(f'{pad}\033[2m{k}: {json.dumps(data[k], separators=(",", ":"), default=str)}\033[0m\n')
 
         # Top 5 slowest
-        top = sorted(spans, key=lambda e: (e.get('end') or 0) - (e.get('start') or 0), reverse=True)[:5]
+        non_root = [e for e in spans if e.get('depth', 0) > 0]
+        top = sorted(non_root, key=lambda e: (e.get('end') or 0) - (e.get('start') or 0), reverse=True)[:5]
         if top:
             out.write(f'\n  {"─" * 60}\n')
             out.write(f'  \033[1m🔥 Top 5 slowest:\033[0m\n')

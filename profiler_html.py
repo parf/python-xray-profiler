@@ -267,7 +267,8 @@ def render(entries: list, task_id: str = '') -> str:
     html += '</table>\n'
 
     # Top 5 slowest
-    top = sorted(spans, key=lambda e: e['end'] - e['start'], reverse=True)[:5]
+    non_root = [e for e in spans if e.get('depth', 0) > 0]
+    top = sorted(non_root, key=lambda e: e['end'] - e['start'], reverse=True)[:5]
     if top:
         html += '<h3>🔥 Top 5 slowest</h3>\n<table>\n'
         html += '<tr><th>Block</th><th class="r">Time(ms)</th>'
