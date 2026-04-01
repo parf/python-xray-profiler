@@ -20,10 +20,15 @@ and where the bottlenecks are.
 - decorator (class): `@Xray.trace_class()` — auto-profile all public methods
 - decorator (class): `@Xray.trace_class(methods=['find'])` — specific methods only
 - `Xray.info()` / `warning()` / `alert()` — events, checkpoints, error markers
-- **Web panel** — auto-injected HTML report with typed params, expand/collapse, color-coded timing
-- **Instant mode** — real-time stderr with nested outline (like PHP `--profiler=echo`)
 - **Multi-worker** — Redis-backed, thread-safe; multiple processes share one execution trace
 - **Zero overhead** — disabled Xray returns no-op objects, no `if` guards needed
+
+### Reporting
+
+- **Web** — auto-injected HTML panel with Call Tree table, typed params, expand/collapse, color-coded timing, warning/alert badges
+- **JSON** — `/_profiler/json?k=KEY` endpoint returns raw entries as JSON
+- **CLI** — `Xray.report()` prints color-coded tree grouped by worker with Top 5 slowest
+- **CLI instant** — real-time stderr with nested outline, shows every `in`/`out` as it happens
 
 ## Quick Start
 
@@ -199,6 +204,7 @@ Open http://localhost:5000/ — auto-profiled page with execution panel at the b
 | `/threaded` | Multi-worker demo (two iframe workers share task-id) |
 | `/api/search?q=miami` | JSON API (profiler key in `X-Xray-Key` header) |
 | `/_profiler?k=KEY` | Standalone HTML report |
+| `/_profiler/json?k=KEY` | Raw JSON entries |
 
 ## See Also
 
