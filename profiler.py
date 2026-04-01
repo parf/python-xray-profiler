@@ -201,9 +201,11 @@ class Profiler:
         for e in entries:
             threads.setdefault(e.get('thread_id', '?'), []).append(e)
 
-        spans = [e for e in entries if e['type'] == 'span']
+        spans = [e for e in entries if e['type'] == 'span' and e.get('end')]
         infos = [e for e in entries if e['type'] != 'span']
-        total_ms = sum((e['end'] - e['start']) * 1000 for e in spans if e.get('end'))
+        first_start = min((e.get('start') or 9e12) for e in entries)
+        last_end = max((e.get('end') or 0) for e in spans) if spans else first_start
+        total_ms = (last_end - first_start) * 1000
 
         out.write(f'\n\033[1m{"━" * 70}\033[0m\n')
         out.write(f'  \033[1m📊 Profiler Report:\033[0m {tid}\n')
@@ -214,8 +216,14 @@ class Profiler:
 
         for t in sorted(threads):
             thread_entries = threads[t]
-            thread_spans = [e for e in thread_entries if e['type'] == 'span']
-            thread_total = sum((e['end'] - e['start']) * 1000 for e in thread_spans if e.get('end'))
+            thread_spans = [e for e in thread_entries if e['type'] == 'span' and e.get('end')]
+            root_spans = [e for e in thread_spans if e.get('depth', 0) == 0]
+            if root_spans:
+                thread_total = (root_spans[0]['end'] - root_spans[0]['start']) * 1000
+            else:
+                t_start = min((e['start'] for e in thread_spans), default=0)
+                t_end = max((e['end'] for e in thread_spans), default=0)
+                thread_total = (t_end - t_start) * 1000 if t_start else 0
 
             out.write(f'\n  \033[1m▸ [{t}]\033[0m — {len(thread_entries)} entries, \033[1m{thread_total:.1f}ms\033[0m total\n')
             out.write(f'  {"─" * 60}\n')

@@ -146,8 +146,9 @@ def render(entries: list, task_id: str = '') -> str:
         threads.setdefault(e.get('thread_id', '?'), []).append(e)
 
     spans = [e for e in entries if e['type'] == 'span' and e.get('end')]
-    total_ms = sum((e['end'] - e['start']) * 1000 for e in spans)
     first_start = min((e.get('start') or 9e12) for e in entries)
+    last_end = max((e.get('end') or 0) for e in spans) if spans else first_start
+    total_ms = (last_end - first_start) * 1000
 
     html = CSS
     html += '<div class="profiler-report">\n'
@@ -166,7 +167,14 @@ def render(entries: list, task_id: str = '') -> str:
     for tid in sorted(threads):
         thread_entries = threads[tid]
         thread_spans = [e for e in thread_entries if e['type'] == 'span' and e.get('end')]
-        thread_total = sum((e['end'] - e['start']) * 1000 for e in thread_spans)
+        # Use root span (depth=0) duration as wall-clock time, fallback to max end - min start
+        root_spans = [e for e in thread_spans if e.get('depth', 0) == 0]
+        if root_spans:
+            thread_total = (root_spans[0]['end'] - root_spans[0]['start']) * 1000
+        else:
+            t_start = min((e['start'] for e in thread_spans), default=0)
+            t_end = max((e['end'] for e in thread_spans), default=0)
+            thread_total = (t_end - t_start) * 1000 if t_start else 0
 
         if multi:
             html += f'<tr class="thread-sep"><td colspan="{cols + 1}">▸ [{_esc(tid)}] — {len(thread_entries)} entries, {thread_total:.0f}ms</td></tr>\n'
