@@ -51,7 +51,10 @@ def attach_profiler(response):
         delay = int(request.environ.get('profiler_delay_ms', 0))
         wait = bool(request.environ.get('profiler_wait_iframes', False))
         elapsed = (time.time() - Xray._tl().start_time) * 1000 if Xray._tl().start_time else 0
-        html = snippet(task_id, delay_ms=delay, wait_iframes=wait, elapsed_ms=elapsed)
+        entries = Xray.entries(task_id)
+        warns = sum(1 for e in entries if e.get('type') == 'warning')
+        alerts = sum(1 for e in entries if e.get('type') == 'alert')
+        html = snippet(task_id, delay_ms=delay, wait_iframes=wait, elapsed_ms=elapsed, warnings=warns, alerts=alerts)
         response.data = response.data.replace(b'</body>', html.encode() + b'</body>')
 
     # JSON/API responses: add profiler key as header
