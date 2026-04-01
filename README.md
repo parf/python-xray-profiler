@@ -1,19 +1,26 @@
 # Xray
 
+See through your code. Lightweight execution profiler for Python.
+
 Author: Serg Parf <sergey.porfiriev@gmail.com>
 
-Lightweight Python profiler. Tracks execution time, call hierarchy, and custom data.
-Optional support for distributed tasks (Celery, multiprocessing) via shared Redis storage.
-
-- **Spans** — `with Xray.i('name')` measures duration, captures call site
-- **Decorators** — `@Xray.profile()` auto-profiles functions
-- **Info points** — `Xray.info/warning/alert()` for events without duration
-- **Redis storage** — all workers write to one task-id, atomic RPUSH, 1h TTL
-- **Instant mode** — real-time stderr output with nested outline
-- **Report** — `Xray.report()` prints color-coded tree grouped by worker
-- **Zero overhead** — disabled profiler returns no-op objects, no conditionals needed
-
 ![Xray Web Report](screenshot.png)
+
+### What it does
+
+Xray traces function calls, measures timing, tracks memory, and captures parameters —
+then renders a Call Tree showing exactly what happened, how long each step took,
+and where the bottlenecks are.
+
+### Key features
+
+- `with Xray.i('name')` — context manager spans with duration + call site + memory
+- `@Xray.profile()` / `@Xray.trace_class()` — auto-instrument functions and classes
+- `Xray.info()` / `warning()` / `alert()` — events, checkpoints, error markers
+- **Web panel** — auto-injected HTML report with typed params, expand/collapse, color-coded timing
+- **Instant mode** — real-time stderr with nested outline (like PHP `--profiler=echo`)
+- **Multi-worker** — Redis-backed, thread-safe; multiple processes share one execution trace
+- **Zero overhead** — disabled Xray returns no-op objects, no `if` guards needed
 
 ## Quick Start
 
