@@ -149,31 +149,55 @@ def index():
         Profiler.info('request-done')
 
     task_id = request.environ['profiler_task_id']
-    request.environ['profiler_delay_ms'] = 4000  # wait for iframe workers
 
     return f'''<!DOCTYPE html>
 <html>
 <head><title>Profiler Web Example</title></head>
 <body style="font-family: sans-serif; padding: 20px; background: #f5f5f5; margin-bottom: 60vh">
     <h1>📊 Profiler Web Example</h1>
-    <p>This page has auto-profiling. Two background workers run in iframes below.</p>
-    <p>Profiler panel loads after 4s to capture all workers.</p>
+    <p>This page has auto-profiling. Check the panel at the bottom.</p>
+    <ul>
+        <li>DB query returned {len(listings)} rows</li>
+        <li>ES search returned {results['hits']} hits</li>
+    </ul>
+    <h3>Try also:</h3>
+    <ul>
+        <li><a href="/api/search?q=miami+office">/api/search?q=miami+office</a> — JSON API (check X-Profiler-Key header)</li>
+        <li><a href="/threaded">/threaded</a> — multi-worker example (iframes with shared task-id)</li>
+    </ul>
+</body>
+</html>'''
+
+
+@app.route('/threaded')
+def threaded():
+    with Profiler.i('page::threaded'):
+        Profiler.info('request-start', {'ip': request.remote_addr})
+        sim_cache_lookup('page:threaded')
+        listings = sim_db_query('listings', 'state=NY')
+        results = sim_es_search('listing', 'boston warehouse')
+
+    task_id = request.environ['profiler_task_id']
+    request.environ['profiler_delay_ms'] = 4000  # wait for iframe workers
+
+    return f'''<!DOCTYPE html>
+<html>
+<head><title>Profiler — Multi-Worker</title></head>
+<body style="font-family: sans-serif; padding: 20px; background: #f5f5f5; margin-bottom: 60vh">
+    <h1>📊 Multi-Worker Example</h1>
+    <p>Two background workers share the same profiler task-id. Panel loads after 4s.</p>
     <ul>
         <li>DB query returned {len(listings)} rows</li>
         <li>ES search returned {results['hits']} hits</li>
     </ul>
 
-    <h3>Background workers (shared task-id: {task_id})</h3>
+    <h3>Background workers (task-id: {task_id})</h3>
     <div style="display:flex;gap:12px">
         <iframe src="/worker?task_id={task_id}&name=enricher" style="width:200px;height:30px;border:1px solid #ddd;border-radius:4px"></iframe>
         <iframe src="/worker?task_id={task_id}&name=classifier" style="width:200px;height:30px;border:1px solid #ddd;border-radius:4px"></iframe>
     </div>
 
-    <h3>Try also:</h3>
-    <ul>
-        <li><a href="/api/search?q=miami+office">/api/search?q=miami+office</a> — JSON API (check X-Profiler-Key header)</li>
-        <li><a href="/api/search?q=boston+warehouse">/api/search?q=boston+warehouse</a> — another search</li>
-    </ul>
+    <p><a href="/">← back to single-process</a></p>
 </body>
 </html>'''
 
