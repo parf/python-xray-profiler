@@ -6,7 +6,7 @@ Implementation details, Redis format, and architecture.
 
 ```
 Key:  xray:{task_id}    (Redis LIST)
-TTL:  1 hour (auto-set on each push)
+TTL:  5 minutes (auto-set on each push)
 Each element: JSON string
 ```
 

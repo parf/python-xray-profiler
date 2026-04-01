@@ -44,7 +44,7 @@ import threading
 class Xray:
     # Shared (safe across threads)
     _redis = None
-    TTL = 3600  # Redis key expiry (seconds), override via init(ttl=)
+    TTL = 300  # Redis key expiry (seconds), override via init(ttl=)
 
     # Per-thread state (each thread/request gets its own)
     _local = threading.local()
