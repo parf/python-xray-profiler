@@ -152,7 +152,6 @@ def render(entries: list, task_id: str = '') -> str:
 
     html = CSS
     html += '<div class="profiler-report">\n'
-    html += f'<h3>Call Tree &bull; {_esc(task_id)} | {len(entries)} entries | {total_ms:.0f}ms</h3>\n'
     html += '<table>\n'
     multi = len(threads) > 1
     # Assign colors to workers
