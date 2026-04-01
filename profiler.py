@@ -237,14 +237,14 @@ class Profiler:
     # --- Internal ---
 
     @classmethod
-    def _push(cls, entry_type: str, name: str, data: dict = None, start: float = None, end: float = None, thread_id: str = None):
+    def _push(cls, entry_type: str, name: str, data: dict = None, start: float = None, end: float = None, thread_id: str = None, depth: int = None):
         if not cls._enabled or not cls._redis:
             return
         entry = {
             'type': entry_type,
             'name': name,
             'thread_id': thread_id or cls._thread_id,
-            'depth': len(cls._stack),
+            'depth': depth if depth is not None else len(cls._stack),
             'start': start or time.time(),
             'end': end,
             'mem_kb': _mem_kb(),
@@ -265,7 +265,8 @@ class ProfilerSpan:
         self._name = name
         self._data = data or {}
         self._start = time.time()
-        self._thread_id = profiler_cls._thread_id  # capture at creation, not at exit
+        self._thread_id = profiler_cls._thread_id
+        self._depth = len(profiler_cls._stack)  # capture depth before push
 
     def data(self, extra: dict):
         """Add data during execution (like PHP $x?->data())."""
@@ -282,6 +283,7 @@ class ProfilerSpan:
             'span', self._name, self._data,
             start=self._start, end=time.time(),
             thread_id=self._thread_id,
+            depth=self._depth,
         )
         return False
 
@@ -295,6 +297,7 @@ class _InstantSpan:
         self._data = data or {}
         self._start = time.time()
         self._thread_id = profiler_cls._thread_id
+        self._depth = len(profiler_cls._stack)
 
     def data(self, extra: dict):
         self._data.update(extra)
@@ -331,6 +334,7 @@ class _InstantSpan:
             'span', self._name, self._data,
             start=self._start, end=end,
             thread_id=self._thread_id,
+            depth=self._depth,
         )
         return False
 
