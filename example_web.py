@@ -31,8 +31,8 @@ r = redis.Redis(host='redis')
 
 @app.before_request
 def start_profiler():
-    if request.path == '/_profiler':
-        return  # don't profile the profiler
+    if request.path in ('/_profiler', '/worker'):
+        return  # profiler endpoint + worker iframes handle their own init
     task_id = f'web-{uuid4().hex[:8]}'
     request.environ['profiler_task_id'] = task_id
     Profiler.init(r, task_id, context={'method': request.method, 'path': request.path})
@@ -46,7 +46,8 @@ def attach_profiler(response):
 
     # HTML responses: inject profiler panel
     if response.content_type and response.content_type.startswith('text/html'):
-        html = snippet(task_id)
+        delay = int(request.environ.get('profiler_delay_ms', 0))
+        html = snippet(task_id, delay_ms=delay)
         response.data = response.data.replace(b'</body>', html.encode() + b'</body>')
 
     # JSON/API responses: add profiler key as header
@@ -145,16 +146,27 @@ def index():
 
         Profiler.info('request-done')
 
+    task_id = request.environ['profiler_task_id']
+    request.environ['profiler_delay_ms'] = 4000  # wait for iframe workers
+
     return f'''<!DOCTYPE html>
 <html>
 <head><title>Profiler Web Example</title></head>
-<body style="font-family: sans-serif; padding: 20px; background: #f5f5f5">
+<body style="font-family: sans-serif; padding: 20px; background: #f5f5f5; margin-bottom: 60vh">
     <h1>📊 Profiler Web Example</h1>
-    <p>This page has auto-profiling. Check the panel at the bottom.</p>
+    <p>This page has auto-profiling. Two background workers run in iframes below.</p>
+    <p>Profiler panel loads after 4s to capture all workers.</p>
     <ul>
         <li>DB query returned {len(listings)} rows</li>
         <li>ES search returned {results['hits']} hits</li>
     </ul>
+
+    <h3>Background workers (shared task-id: {task_id})</h3>
+    <div style="display:flex;gap:12px">
+        <iframe src="/worker?task_id={task_id}&name=enricher" style="width:200px;height:30px;border:1px solid #ddd;border-radius:4px"></iframe>
+        <iframe src="/worker?task_id={task_id}&name=classifier" style="width:200px;height:30px;border:1px solid #ddd;border-radius:4px"></iframe>
+    </div>
+
     <h3>Try also:</h3>
     <ul>
         <li><a href="/api/search?q=miami+office">/api/search?q=miami+office</a> — JSON API (check X-Profiler-Key header)</li>
@@ -189,6 +201,39 @@ def api_search():
         'classification': classification,
         'profiler': request.environ.get('profiler_task_id'),
     })
+
+
+@app.route('/worker')
+def worker_iframe():
+    """Simulates a background worker (called via iframe with shared task_id)."""
+    task_id = request.args.get('task_id', '')
+    worker_name = request.args.get('name', 'worker')
+    if not task_id:
+        return 'Missing task_id', 400
+
+    Profiler.init(r, task_id, thread_id=worker_name, context={'worker': worker_name})
+
+    with Profiler.i(f'{worker_name}::run'):
+        # Simulate worker doing its own DB + API work
+        sim_db_query('worker_queue', f'worker={worker_name}')
+
+        with Profiler.i(f'{worker_name}::process'):
+            time.sleep(random.uniform(0.3, 0.8))
+
+            if worker_name == 'enricher':
+                with Profiler.i('Geo::batch_geocode', {'count': 25}) as span:
+                    time.sleep(random.uniform(0.2, 0.5))
+                    span.data({'resolved': 23, 'failed': 2})
+                Profiler.info('enricher-checkpoint', {'processed': 25})
+
+            elif worker_name == 'classifier':
+                sim_ai_classify('Warehouse with loading dock in Boston industrial district near I-93')
+                sim_es_search('listing', 'similar:warehouse:boston')
+                Profiler.warning('model-fallback', {'primary': 'gpt-4o', 'fallback': 'gpt-4o-mini', 'reason': 'rate-limited'})
+
+        Profiler.info(f'{worker_name}::done')
+
+    return f'<html><body style="font:11px monospace;color:#888">✓ {worker_name} done</body></html>'
 
 
 if __name__ == '__main__':

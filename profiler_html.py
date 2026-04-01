@@ -55,9 +55,9 @@ def _truncatable(content: str, max_len: int = 200) -> str:
     if plain_len <= max_len:
         return content
     _TRUNC_ID += 1
-    tid = f'trunc-{_TRUNC_ID}'
-    return (f'<span class="truncated" id="{tid}">{content}</span>'
-            f' <span class="expand-btn" data-target="{tid}">▸</span>')
+    trunc_id = f'trunc-{_TRUNC_ID}'
+    return (f'<span class="truncated" id="{trunc_id}">{content}</span>'
+            f' <span class="expand-btn" data-target="{trunc_id}">▸</span>')
 
 
 def _time_class(ms: float, total_ms: float) -> str:
@@ -275,7 +275,7 @@ def render_from_redis(task_id: str, redis_client) -> str:
     return render(entries, task_id)
 
 
-def snippet(task_id: str, endpoint: str = '/_profiler') -> str:
+def snippet(task_id: str, endpoint: str = '/_profiler', delay_ms: int = 0) -> str:
     return f'''
 <div id="profiler-container" style="position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow:auto;z-index:99999;box-shadow:0 -2px 10px rgba(0,0,0,0.3)">
     <div id="profiler-bar" style="background:#f88;padding:2px 8px;font:bold 12px monospace;color:#fff;cursor:pointer;text-align:right">
@@ -291,9 +291,12 @@ def snippet(task_id: str, endpoint: str = '/_profiler') -> str:
         var b = document.getElementById("profiler-body");
         b.style.display = b.style.display === "none" ? "block" : "none";
     }});
-    fetch("{endpoint}?k={task_id}")
-        .then(function(r) {{ return r.text(); }})
-        .then(function(html) {{ document.getElementById("profiler-body").innerHTML = html; }});
+    function loadProfiler() {{
+        fetch("{endpoint}?k={task_id}")
+            .then(function(r) {{ return r.text(); }})
+            .then(function(html) {{ document.getElementById("profiler-body").innerHTML = html; }});
+    }}
+    {f'setTimeout(loadProfiler, {delay_ms});' if delay_ms else 'loadProfiler();'}
     document.addEventListener("click", function(e) {{
         if (e.target.classList.contains("expand-btn")) {{
             var t = document.getElementById(e.target.getAttribute("data-target"));
