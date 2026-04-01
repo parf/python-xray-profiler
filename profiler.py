@@ -1,0 +1,405 @@
+"""
+Redis-backed Profiler for Python (Celery-aware)
+
+Analog of PHP Profiler::i() — tracks execution time, call sites,
+and custom data. Stores entries in Redis list per task-id.
+
+Usage:
+    from profiler import Profiler
+    import redis
+
+    # Redis mode — store in Redis list
+    Profiler.init(redis.Redis(), 'task-123', context={'user_id': 42})
+
+    # Instant mode — echo to stderr (like PHP --profiler=echo)
+    Profiler.init_instant()
+
+    # Context manager (span with duration)
+    with Profiler.i('ES::search', {'query': q}) as span:
+        results = es.search(q)
+        span.data({'count': len(results)})
+
+    # Decorator
+    @Profiler.profile()
+    def find_listings(params): ...
+
+    # Closure wrapper
+    result = Profiler.wrap(lambda: api_call(url), 'API::call', {'url': url})
+
+    # Info points (no duration)
+    Profiler.info('cache-hit', {'key': k})
+    Profiler.warning('rate-limit', {'remaining': 5})
+    Profiler.alert('timeout', {'url': url})
+"""
+
+import os
+import sys
+import time
+import json
+import inspect
+import threading
+
+
+class Profiler:
+    _redis = None
+    _task_id: str = None
+    _thread_id: str = None
+    _default_context: dict = {}
+    _enabled: bool = False
+    _instant: bool = False
+    _start_time: float = 0
+    _stack: list = []  # active span names stack (for nesting depth + context)
+
+    # --- Setup ---
+
+    @classmethod
+    def init(cls, redis_client, task_id: str, thread_id: str = None, context: dict = None, instant: bool = False):
+        """Init profiler for a task. Call once per task/request."""
+        cls._redis = redis_client
+        cls._task_id = task_id
+        cls._thread_id = thread_id or threading.current_thread().name
+        cls._default_context = context or {}
+        cls._enabled = True
+        cls._instant = instant
+        cls._start_time = time.time()
+        cls._stack = []
+        if instant:
+            _stderr(f'P[0.0] \033[1minit\033[0m task={task_id}')
+
+    @classmethod
+    def init_instant(cls, thread_id: str = None):
+        """Init instant mode — all calls echoed to stderr. No Redis needed."""
+        cls._redis = None
+        cls._task_id = None
+        cls._thread_id = thread_id or threading.current_thread().name
+        cls._default_context = {}
+        cls._enabled = True
+        cls._instant = True
+        cls._start_time = time.time()
+        cls._stack = []
+        _stderr(f'P[0.0] \033[1minit\033[0m instant')
+
+    @classmethod
+    def disable(cls):
+        cls._enabled = False
+
+    # --- Spans (with duration) ---
+
+    @classmethod
+    def i(cls, name: str = None, data: dict = None) -> 'ProfilerSpan':
+        """Start a profiling span. Use as context manager."""
+        if not cls._enabled:
+            return _NullSpan()
+        resolved = name or _caller_name()
+        if cls._instant:
+            return _InstantSpan(cls, resolved, data)
+        return ProfilerSpan(cls, resolved, data)
+
+    # --- Info points (no duration) ---
+
+    @classmethod
+    def info(cls, name: str, data: dict = None):
+        if cls._instant and cls._enabled:
+            _stderr_entry(cls._start_time, 'info', name, data, len(cls._stack))
+        cls._push('info', name, data)
+
+    @classmethod
+    def warning(cls, name: str, data: dict = None):
+        if cls._instant and cls._enabled:
+            _stderr_entry(cls._start_time, '\033[33mwarning\033[0m', name, data, len(cls._stack))
+        cls._push('warning', name, data)
+
+    @classmethod
+    def alert(cls, name: str, data: dict = None):
+        if cls._instant and cls._enabled:
+            _stderr_entry(cls._start_time, '\033[31malert\033[0m', name, data, len(cls._stack))
+        cls._push('alert', name, data)
+
+    # --- Decorator ---
+
+    @classmethod
+    def profile(cls, name: str = None):
+        """Decorator: @Profiler.profile() or @Profiler.profile('custom-name')"""
+        def decorator(fn):
+            label = name or fn.__qualname__
+            def wrapper(*args, **kwargs):
+                with cls.i(label):
+                    return fn(*args, **kwargs)
+            wrapper.__name__ = fn.__name__
+            wrapper.__qualname__ = fn.__qualname__
+            return wrapper
+        return decorator
+
+    # --- Closure helper ---
+
+    @classmethod
+    def wrap(cls, fn, name: str = None, data: dict = None):
+        """Wrap a callable: result = Profiler.wrap(lambda: slow_call(), 'name')"""
+        label = name or (fn.__qualname__ if hasattr(fn, '__qualname__') else 'closure')
+        with cls.i(label, data):
+            return fn()
+
+    # --- Report ---
+
+    @classmethod
+    def entries(cls, task_id: str = None) -> list:
+        """Read all profiler entries from Redis for a task."""
+        if not cls._redis:
+            return []
+        key = f'profiler:{task_id or cls._task_id}'
+        return [json.loads(e) for e in cls._redis.lrange(key, 0, -1)]
+
+    @classmethod
+    def report(cls, task_id: str = None, file=None):
+        """Print execution report to file (default: stdout)."""
+        import sys as _sys
+        out = file or _sys.stdout
+        tid = task_id or cls._task_id
+        entries = cls.entries(tid)
+
+        if not entries:
+            out.write('No profiler data found.\n')
+            return
+
+        # Sort by start time (spans pushed on exit, not entry) + group by thread
+        entries.sort(key=lambda e: e.get('start') or 0)
+        threads = {}
+        for e in entries:
+            threads.setdefault(e.get('thread_id', '?'), []).append(e)
+
+        spans = [e for e in entries if e['type'] == 'span']
+        infos = [e for e in entries if e['type'] != 'span']
+        total_ms = sum((e['end'] - e['start']) * 1000 for e in spans if e.get('end'))
+
+        out.write(f'\n\033[1m{"━" * 70}\033[0m\n')
+        out.write(f'  \033[1m📊 Profiler Report:\033[0m {tid}\n')
+        out.write(f'  Entries: {len(entries)} ({len(spans)} spans, {len(infos)} info)\n')
+        out.write(f'  Workers: {len(threads)}\n')
+        out.write(f'  Total span time: \033[1m{total_ms:.1f}ms\033[0m\n')
+        out.write(f'\033[1m{"━" * 70}\033[0m\n')
+
+        for t in sorted(threads):
+            thread_entries = threads[t]
+            thread_spans = [e for e in thread_entries if e['type'] == 'span']
+            thread_total = sum((e['end'] - e['start']) * 1000 for e in thread_spans if e.get('end'))
+
+            out.write(f'\n  \033[1m▸ [{t}]\033[0m — {len(thread_entries)} entries, \033[1m{thread_total:.1f}ms\033[0m total\n')
+            out.write(f'  {"─" * 60}\n')
+
+            for e in thread_entries:
+                indent = '  ' * e.get('depth', 0)
+                data = e.get('data') or {}
+                if e['type'] == 'span' and e.get('end'):
+                    ms = (e['end'] - e['start']) * 1000
+                    color = '\033[31m' if ms > 100 else '\033[33m' if ms > 50 else '\033[32m'
+                    out.write(f'    {indent}{color}{ms:7.1f}ms\033[0m  \033[1m{e["name"]}\033[0m')
+                else:
+                    icons = {'info': '·', 'warning': '\033[33m⚠\033[0m', 'alert': '\033[31;1m‼\033[0m'}
+                    icon = icons.get(e['type'], '?')
+                    name_color = '\033[33;1m' if e['type'] == 'warning' else '\033[31;1m' if e['type'] == 'alert' else '\033[1m'
+                    out.write(f'    {indent}{icon}        {name_color}{e["name"]}\033[0m')
+                # Data: request/response on own lines, rest inline
+                pad = '    ' + indent + ' ' * 11
+                inline = {k: v for k, v in data.items() if k not in ('request', 'response')}
+                if inline:
+                    out.write(f' \033[2m{json.dumps(inline, separators=(",", ":"), default=str)}\033[0m')
+                out.write('\n')
+                for k in ('request', 'response'):
+                    if k in data:
+                        out.write(f'{pad}\033[2m{k}: {json.dumps(data[k], separators=(",", ":"), default=str)}\033[0m\n')
+
+        # Top 5 slowest
+        top = sorted(spans, key=lambda e: (e.get('end') or 0) - (e.get('start') or 0), reverse=True)[:5]
+        if top:
+            out.write(f'\n  {"─" * 60}\n')
+            out.write(f'  \033[1m🔥 Top 5 slowest:\033[0m\n')
+            for e in top:
+                ms = (e['end'] - e['start']) * 1000
+                color = '\033[31m' if ms > 100 else '\033[33m' if ms > 50 else '\033[32m'
+                out.write(f'    {color}{ms:7.1f}ms\033[0m  {e["name"]}  \033[2m[{e.get("thread_id", "?")}]\033[0m\n')
+
+        out.write('\n')
+
+    # --- HTML Report ---
+
+    @classmethod
+    def html_report(cls, task_id: str = None) -> str:
+        """Render HTML profiler report."""
+        from profiler_html import render_from_redis
+        return render_from_redis(task_id or cls._task_id, cls._redis)
+
+    @classmethod
+    def html_snippet(cls, endpoint: str = '/_profiler') -> str:
+        """JS snippet to inject into HTML page (async fetch + embed)."""
+        from profiler_html import snippet
+        return snippet(cls._task_id, endpoint)
+
+    # --- Internal ---
+
+    @classmethod
+    def _push(cls, entry_type: str, name: str, data: dict = None, start: float = None, end: float = None):
+        if not cls._enabled or not cls._redis:
+            return
+        entry = {
+            'type': entry_type,
+            'name': name,
+            'thread_id': cls._thread_id,
+            'depth': len(cls._stack),
+            'start': start or time.time(),
+            'end': end,
+            'mem_kb': _mem_kb(),
+            'data': data,
+            'context': cls._default_context,
+            'caller': _caller_stack(3),
+        }
+        key = f'profiler:{cls._task_id}'
+        cls._redis.rpush(key, json.dumps(entry, default=str))
+        cls._redis.expire(key, 3600)
+
+
+class ProfilerSpan:
+    """Context manager span — auto-records duration on exit."""
+
+    def __init__(self, profiler_cls, name: str, data: dict = None):
+        self._profiler = profiler_cls
+        self._name = name
+        self._data = data or {}
+        self._start = time.time()
+
+    def data(self, extra: dict):
+        """Add data during execution (like PHP $x?->data())."""
+        self._data.update(extra)
+        return self
+
+    def __enter__(self):
+        self._profiler._stack.append(self._name)
+        return self
+
+    def __exit__(self, *exc):
+        self._profiler._stack.pop() if self._profiler._stack else None
+        self._profiler._push(
+            'span', self._name, self._data,
+            start=self._start, end=time.time(),
+        )
+        return False
+
+
+class _InstantSpan:
+    """Span that echoes to stderr immediately on enter and exit."""
+
+    def __init__(self, profiler_cls, name: str, data: dict = None):
+        self._profiler = profiler_cls
+        self._name = name
+        self._data = data or {}
+        self._start = time.time()
+
+    def data(self, extra: dict):
+        self._data.update(extra)
+        return self
+
+    def __enter__(self):
+        depth = len(self._profiler._stack)
+        indent = '  ' * depth
+        pad = ' ' * 9 + indent
+        caller = _caller_location(2)
+        offset = (time.time() - self._profiler._start_time) * 1000
+        lines = f'P[{offset:.1f}] {indent}\033[1min {self._name}\033[0m\n{pad}\033[2m{caller}\033[0m'
+        lines += _format_data_lines(self._data, pad)
+        _stderr(lines)
+        self._profiler._stack.append(self._name)
+        return self
+
+    def __exit__(self, *exc):
+        self._profiler._stack.pop() if self._profiler._stack else None
+        end = time.time()
+        duration_ms = (end - self._start) * 1000
+        depth = len(self._profiler._stack)
+        indent = '  ' * depth
+        pad = ' ' * 9 + indent
+        caller = _caller_location(2)
+        offset = (end - self._profiler._start_time) * 1000
+        lines = f'\033[2mP[{offset:.1f}] {indent}out {self._name} {duration_ms:.1f}ms\n{pad}{caller}'
+        for k, v in (self._data or {}).items():
+            lines += f'\n{pad}{k}: {json.dumps(v, default=str)}'
+        lines += '\033[0m'
+        _stderr(lines)
+        # Also push to Redis if available
+        self._profiler._push(
+            'span', self._name, self._data,
+            start=self._start, end=end,
+        )
+        return False
+
+
+class _NullSpan:
+    """No-op span when profiler disabled."""
+    def data(self, extra): return self
+    def __enter__(self): return self
+    def __exit__(self, *exc): return False
+
+
+# --- Helpers ---
+
+def _caller_name(depth=2):
+    """Auto-detect caller class.method or function name."""
+    frame = inspect.stack()[depth]
+    cls_name = ''
+    if 'self' in frame.frame.f_locals:
+        cls_name = type(frame.frame.f_locals['self']).__name__ + '.'
+    elif 'cls' in frame.frame.f_locals:
+        cls_name = frame.frame.f_locals['cls'].__name__ + '.'
+    return f'{cls_name}{frame.function}'
+
+
+def _caller_stack(depth=3, skip=2):
+    """Get call stack: ['file:line function()', ...]."""
+    stack = inspect.stack()[skip:skip + depth]
+    return [f'{f.filename}:{f.lineno} {f.function}()' for f in stack]
+
+
+def _caller_location(skip=2):
+    """Single caller file:line for instant output."""
+    stack = inspect.stack()
+    if len(stack) > skip:
+        f = stack[skip]
+        path = f.filename.replace('./', '')
+        return f'{path}:{f.lineno}'
+
+
+def _mem_kb() -> int:
+    """Current process RSS in KB (Linux /proc, fallback resource module)."""
+    try:
+        with open(f'/proc/{os.getpid()}/statm', 'r') as f:
+            return int(f.read().split()[1]) * (os.sysconf('SC_PAGE_SIZE') // 1024)
+    except Exception:
+        try:
+            import resource
+            return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        except Exception:
+            return 0
+    return '?'
+
+
+def _stderr(msg: str, _=None):
+    sys.stderr.write(msg + '\n')
+    sys.stderr.flush()
+
+
+def _format_data_lines(data: dict, pad: str) -> str:
+    """Format data dict as indented key: value lines."""
+    if not data:
+        return ''
+    lines = ''
+    for k, v in data.items():
+        lines += f'\n{pad}\033[2m{k}: {json.dumps(v, default=str)}\033[0m'
+    return lines
+
+
+def _stderr_entry(start_time: float, entry_type: str, name: str, data: dict = None, depth: int = 0):
+    indent = '  ' * depth
+    pad = ' ' * 9 + indent
+    offset = (time.time() - start_time) * 1000
+    caller = _caller_location(3)
+    lines = f'P[{offset:.1f}] {indent}{entry_type} \033[1m{name}\033[0m\n{pad}\033[2m{caller}\033[0m'
+    lines += _format_data_lines(data, pad)
+    _stderr(lines)

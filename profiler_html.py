@@ -1,0 +1,272 @@
+"""
+HTML renderer for Python Profiler.
+
+Renders profiler entries as a styled HTML table (Call Tree format).
+Two modes:
+  - render() — full HTML report (standalone or embeddable)
+  - snippet() — JS snippet to inject into page (async fetch)
+"""
+
+import json
+
+
+def _esc(s):
+    return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
+
+_TRUNC_ID = 0
+
+def _truncatable(content: str, max_len: int = 200) -> str:
+    """Wrap long content in a truncatable div with expand button."""
+    global _TRUNC_ID
+    if len(content) <= max_len:
+        return content
+    _TRUNC_ID += 1
+    tid = f'trunc-{_TRUNC_ID}'
+    return (f'<span class="truncated" id="{tid}">{content}</span>'
+            f' <span class="expand-btn" data-target="{tid}">▸</span>')
+
+
+def _time_class(ms: float, total_ms: float) -> str:
+    pct = (ms / total_ms * 100) if total_ms else 0
+    if pct > 30 or ms > 200:
+        return 'time-red'
+    if pct > 10 or ms > 100:
+        return 'time-yellow'
+    return ''
+
+
+CSS = '''
+<style>
+.profiler-report {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    background: #fff;
+    border-top: 3px solid #f88;
+    margin: 8px 0;
+    overflow-x: auto;
+}
+.profiler-report h3 {
+    text-align: center;
+    margin: 6px 0;
+    font-size: 13px;
+    color: #333;
+}
+.profiler-report table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.profiler-report th {
+    background: #f5f5f5;
+    border-bottom: 2px solid #ccc;
+    padding: 3px 6px;
+    text-align: left;
+    font-size: 11px;
+    color: #666;
+}
+.profiler-report th.r { text-align: right; }
+.profiler-report td {
+    padding: 2px 6px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+    white-space: nowrap;
+}
+.profiler-report td.r { text-align: right; }
+.profiler-report tr:hover { background: #f8f8f0; }
+.profiler-report .block { font-weight: bold; color: #333; }
+.profiler-report .params { color: #888; font-weight: normal; max-width: 700px; word-break: break-all; white-space: normal; }
+.profiler-report .truncated { display: inline; }
+.profiler-report .truncated:not(.expanded) { display: -webkit-inline-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; vertical-align: top; word-break: break-all; }
+.profiler-report .truncated.expanded { word-break: break-all; }
+.profiler-report .expand-btn { color: #4fc3f7; cursor: pointer; font-size: 11px; user-select: none; }
+.profiler-report .start-col { color: #aaa; cursor: help; font-size: 10px; }
+.profiler-report .worker-col { color: #999; font-size: 10px; text-align: center; cursor: help; }
+.profiler-report .indent { color: #ccc; }
+.profiler-report .time-red { background: #fcc; }
+.profiler-report .time-yellow { background: #ffc; }
+.profiler-report .warn-row { color: #b8860b; }
+.profiler-report .warn-row .block { color: #b8860b; }
+.profiler-report .alert-row { color: #c00; font-weight: bold; }
+.profiler-report .alert-row .block { color: #c00; }
+.profiler-report .info-row { color: #999; }
+.profiler-report .info-row .block { color: #888; font-weight: normal; }
+.profiler-report .thread-sep td { background: #e8e8ff; font-weight: bold; padding: 4px 6px; }
+</style>
+'''
+
+
+def render(entries: list, task_id: str = '') -> str:
+    global _TRUNC_ID
+    if not entries:
+        return '<div class="profiler-report"><h3>No profiler data.</h3></div>'
+
+    # Sort by start time (spans pushed to Redis on exit, not entry)
+    entries.sort(key=lambda e: e.get('start') or 0)
+
+    threads = {}
+    for e in entries:
+        threads.setdefault(e.get('thread_id', '?'), []).append(e)
+
+    spans = [e for e in entries if e['type'] == 'span' and e.get('end')]
+    total_ms = sum((e['end'] - e['start']) * 1000 for e in spans)
+    first_start = min((e.get('start') or 9e12) for e in entries)
+
+    html = CSS
+    html += '<div class="profiler-report">\n'
+    html += f'<h3>Call Tree &bull; {_esc(task_id)} | {len(entries)} entries | {total_ms:.0f}ms</h3>\n'
+    html += '<table>\n'
+    multi = len(threads) > 1
+    # Assign colors to workers
+    worker_colors = ['#fff', '#f0f4ff', '#fff8f0', '#f0fff4', '#fff0f8', '#f8f0ff', '#f0ffff', '#fffff0']
+    worker_bg = {}
+    for i, tid in enumerate(sorted(threads)):
+        worker_bg[tid] = worker_colors[i % len(worker_colors)]
+
+    cols = 5 if multi else 4
+    w_th = '<th>W</th>' if multi else ''
+    html += f'<tr><th class="r" title="% from start">%%</th><th>Block</th><th>Params</th><th class="r"><small>Mem(MB)</small></th><th class="r">Time(ms)</th>{w_th}</tr>\n'
+
+    for tid in sorted(threads):
+        thread_entries = threads[tid]
+        thread_spans = [e for e in thread_entries if e['type'] == 'span' and e.get('end')]
+        thread_total = sum((e['end'] - e['start']) * 1000 for e in thread_spans)
+        w_num = sorted(threads).index(tid) + 1
+
+        if multi:
+            html += f'<tr class="thread-sep"><td colspan="{cols + 1}">▸ [{_esc(tid)}] — {len(thread_entries)} entries, {thread_total:.0f}ms</td></tr>\n'
+
+        for e in thread_entries:
+            depth = e.get('depth', 0)
+            indent = '<span class="indent">' + '│ ' * depth + '</span>' if depth else ''
+            data = e.get('data') or {}
+            start_offset = ((e.get('start') or first_start) - first_start) * 1000
+
+            if e['type'] == 'span' and e.get('end'):
+                ms = (e['end'] - e['start']) * 1000
+                pct = (ms / total_ms * 100) if total_ms else 0
+                tcls = _time_class(ms, total_ms)
+
+                # Params: all data in one cell, request/response as div blocks
+                inline = {k: v for k, v in data.items() if k not in ('request', 'response')}
+                params = _truncatable(_esc(json.dumps(inline, separators=(', ', ': '), default=str))) if inline else ''
+                for k in ('request', 'response'):
+                    if k in data:
+                        val = _esc(json.dumps(data[k], separators=(', ', ': '), default=str))
+                        _TRUNC_ID += 1
+                        tid = f'trunc-{_TRUNC_ID}'
+                        params += (f'<br><span class="expand-btn" data-target="{tid}">[+]</span> '
+                                   f'<b>{k}:</b> <span class="truncated" id="{tid}">{val}</span>')
+
+                mem_kb = e.get('mem_kb') or 0
+                mem_mb = f'<small>{mem_kb / 1024:.1f}</small>' if mem_kb else ''
+
+                start_pct = (start_offset / (total_ms or 1)) * 100
+
+                bg = f' style="background:{worker_bg[tid]}"' if multi else ''
+                w_td = f'<td class="worker-col" title="{_esc(tid)}">({w_num})</td>' if multi else ''
+
+                html += f'<tr{bg}>'
+                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
+                html += f'<td>{indent}<span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="params">{params}</td>'
+                html += f'<td class="r">{mem_mb}</td>'
+                html += f'<td class="r {tcls}">{ms:.1f}</td>'
+                html += f'{w_td}'
+                html += f'</tr>\n'
+
+            elif e['type'] == 'warning':
+                start_pct = (start_offset / (total_ms or 1)) * 100
+                params = _truncatable(_esc(json.dumps(data, separators=(', ', ': '), default=str))) if data else ''
+                rest = cols - 2  # remaining cols after %% and Block
+                bg = f' style="background:{worker_bg[tid]}"' if multi else ''
+                html += f'<tr class="warn-row"{bg}>'
+                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
+                html += f'<td>{indent}⚠ <span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="params">{params}</td>'
+                html += f'<td colspan="{rest}"></td></tr>\n'
+
+            elif e['type'] == 'alert':
+                start_pct = (start_offset / (total_ms or 1)) * 100
+                params = _truncatable(_esc(json.dumps(data, separators=(', ', ': '), default=str))) if data else ''
+                rest = cols - 2
+                bg = f' style="background:{worker_bg[tid]}"' if multi else ''
+                html += f'<tr class="alert-row"{bg}>'
+                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
+                html += f'<td>{indent}‼ <span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="params">{params}</td>'
+                html += f'<td colspan="{rest}"></td></tr>\n'
+
+            else:  # info
+                start_pct = (start_offset / (total_ms or 1)) * 100
+                params = _truncatable(_esc(json.dumps(data, separators=(', ', ': '), default=str))) if data else ''
+                rest = cols - 2
+                bg = f' style="background:{worker_bg[tid]}"' if multi else ''
+                html += f'<tr class="info-row"{bg}>'
+                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
+                html += f'<td>{indent}· <span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="params">{params}</td>'
+                html += f'<td colspan="{rest}"></td></tr>\n'
+
+    html += '</table>\n'
+
+    # Top 5 slowest
+    top = sorted(spans, key=lambda e: e['end'] - e['start'], reverse=True)[:5]
+    if top:
+        html += '<h3>🔥 Top 5 slowest</h3>\n<table>\n'
+        html += '<tr><th>Block</th><th class="r">Time(ms)</th>'
+        if multi:
+            html += '<th>Worker</th>'
+        html += '</tr>\n'
+        for e in top:
+            ms = (e['end'] - e['start']) * 1000
+            tcls = _time_class(ms, total_ms)
+            html += f'<tr><td class="block">{_esc(e["name"])}</td>'
+            html += f'<td class="r {tcls}">{ms:.1f}</td>'
+            if multi:
+                html += f'<td class="params">{_esc(e.get("thread_id", "?"))}</td>'
+            html += f'</tr>\n'
+        html += '</table>\n'
+
+    html += '</div>\n'
+    return html
+
+
+def render_from_redis(task_id: str, redis_client) -> str:
+    entries = [json.loads(e) for e in redis_client.lrange(f'profiler:{task_id}', 0, -1)]
+    return render(entries, task_id)
+
+
+def snippet(task_id: str, endpoint: str = '/_profiler') -> str:
+    return f'''
+<div id="profiler-container" style="position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow:auto;z-index:99999;box-shadow:0 -2px 10px rgba(0,0,0,0.3)">
+    <div id="profiler-bar" style="background:#f88;padding:2px 8px;font:bold 12px monospace;color:#fff;cursor:pointer;text-align:right">
+        📊 Profiler: {task_id}
+        <a href="{endpoint}?k={task_id}" target="_blank" style="color:#fff;margin-left:8px">open ↗</a>
+    </div>
+    <div id="profiler-body"></div>
+</div>
+<script>
+(function() {{
+    document.getElementById("profiler-bar").addEventListener("click", function(e) {{
+        if (e.target.tagName === "A") return;
+        var b = document.getElementById("profiler-body");
+        b.style.display = b.style.display === "none" ? "block" : "none";
+    }});
+    fetch("{endpoint}?k={task_id}")
+        .then(function(r) {{ return r.text(); }})
+        .then(function(html) {{ document.getElementById("profiler-body").innerHTML = html; }});
+    document.addEventListener("click", function(e) {{
+        if (e.target.classList.contains("expand-btn")) {{
+            var t = document.getElementById(e.target.getAttribute("data-target"));
+            if (t) {{
+                t.classList.toggle("expanded");
+                var exp = t.classList.contains("expanded");
+                var txt = e.target.textContent;
+                if (txt === "[+]" || txt === "[-]") e.target.textContent = exp ? "[-]" : "[+]";
+                else e.target.textContent = exp ? "\\u25be" : "\\u25b8";
+            }}
+        }}
+    }});
+}})();
+</script>
+'''
