@@ -164,6 +164,39 @@ class Xray:
             return wrapper
         return decorator
 
+    # --- Class decorator ---
+
+    @classmethod
+    def trace_class(cls, methods: list = None, skip_private: bool = True):
+        """Class decorator: auto-profile all (or specific) methods.
+
+        @Xray.trace_class()                          # all public methods
+        @Xray.trace_class(methods=['find', 'save'])   # specific methods only
+        @Xray.trace_class(skip_private=False)          # include _private too
+        """
+        def decorator(klass):
+            import functools
+            for attr_name in list(vars(klass)):
+                if attr_name.startswith('__'):
+                    continue
+                if skip_private and attr_name.startswith('_'):
+                    continue
+                if methods and attr_name not in methods:
+                    continue
+                attr = getattr(klass, attr_name)
+                if not callable(attr):
+                    continue
+                label = f'{klass.__name__}.{attr_name}'
+
+                @functools.wraps(attr)
+                def wrapper(*args, _xray_label=label, _xray_fn=attr, **kwargs):
+                    with cls.i(_xray_label):
+                        return _xray_fn(*args, **kwargs)
+
+                setattr(klass, attr_name, wrapper)
+            return klass
+        return decorator
+
     # --- Closure helper ---
 
     @classmethod

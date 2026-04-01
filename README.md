@@ -53,6 +53,37 @@ def find_listings(params): ...
 def helper(): ...
 ```
 
+## Class Decorator
+
+Auto-profile all (or specific) methods of a class. Each call creates a span
+named `ClassName.method_name`. Private methods (`_name`) are skipped by default.
+
+```python
+# All public methods — every call to find/enrich/save is auto-profiled
+@Xray.trace_class()
+class SearchService:
+    def find(self, q): ...           # → span "SearchService.find"
+    def enrich(self, data): ...      # → span "SearchService.enrich"
+    def save(self, item): ...        # → span "SearchService.save"
+    def _internal(self): ...         # skipped (private)
+
+# Specific methods only
+@Xray.trace_class(methods=['find', 'save'])
+class SearchService:
+    def find(self, q): ...           # profiled
+    def save(self, item): ...        # profiled
+    def enrich(self, data): ...      # NOT profiled
+
+# Include private methods too
+@Xray.trace_class(skip_private=False)
+class Service:
+    def run(self): ...               # profiled
+    def _setup(self): ...            # profiled (skip_private=False)
+```
+
+Useful for instrumenting service classes, repositories, and API clients
+without adding `with Xray.i()` to every method.
+
 ## Closure Wrapper
 
 ```python
