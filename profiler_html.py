@@ -14,12 +14,41 @@ def _esc(s):
     return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
+def _fmt_val(v) -> str:
+    """Format a value with type-specific coloring."""
+    if v is None:
+        return '<span class="v-null">null</span>'
+    if isinstance(v, bool):
+        return f'<span class="v-bool">{"true" if v else "false"}</span>'
+    if isinstance(v, int):
+        return f'<span class="v-int">{v}</span>'
+    if isinstance(v, float):
+        return f'<span class="v-int">{v}</span>'
+    if isinstance(v, str):
+        return f'<span class="v-str">{_esc(v)}</span>'
+    # array, dict — render as JSON
+    return f'<span class="v-json">{_esc(json.dumps(v, separators=(", ", ": "), default=str))}</span>'
+
+
+def _fmt_data(data: dict) -> str:
+    """Format a data dict with typed key:value pairs."""
+    if not data:
+        return ''
+    parts = []
+    for k, v in data.items():
+        parts.append(f'<b>{_esc(k)}</b>: {_fmt_val(v)}')
+    return ', '.join(parts)
+
+
 _TRUNC_ID = 0
 
 def _truncatable(content: str, max_len: int = 200) -> str:
-    """Wrap long content in a truncatable div with expand button."""
+    """Wrap long content in a truncatable span with expand button."""
     global _TRUNC_ID
-    if len(content) <= max_len:
+    # Check plain text length (strip HTML tags for length check)
+    import re
+    plain_len = len(re.sub(r'<[^>]+>', '', content))
+    if plain_len <= max_len:
         return content
     _TRUNC_ID += 1
     tid = f'trunc-{_TRUNC_ID}'
@@ -79,6 +108,11 @@ CSS = '''
 .profiler-report .truncated:not(.expanded) { display: -webkit-inline-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; vertical-align: top; word-break: break-all; }
 .profiler-report .truncated.expanded { word-break: break-all; }
 .profiler-report .expand-btn { color: #4fc3f7; cursor: pointer; font-size: 11px; user-select: none; }
+.profiler-report .v-str { color: #6a9955; font-size: 11px; }
+.profiler-report .v-int { color: #098658; }
+.profiler-report .v-bool { color: #569cd6; }
+.profiler-report .v-null { color: #aaa; font-style: italic; }
+.profiler-report .v-json { color: #888; font-size: 11px; }
 .profiler-report .start-col { color: #aaa; cursor: help; font-size: 10px; }
 .profiler-report .worker-col { color: #999; font-size: 10px; text-align: center; cursor: help; }
 .profiler-report .indent { color: #ccc; }
@@ -146,16 +180,16 @@ def render(entries: list, task_id: str = '') -> str:
                 pct = (ms / total_ms * 100) if total_ms else 0
                 tcls = _time_class(ms, total_ms)
 
-                # Params: all data in one cell, request/response as div blocks
+                # Params: all data in one cell, request/response expandable
                 inline = {k: v for k, v in data.items() if k not in ('request', 'response')}
-                params = _truncatable(_esc(json.dumps(inline, separators=(', ', ': '), default=str))) if inline else ''
+                params = _fmt_data(inline)
                 for k in ('request', 'response'):
                     if k in data:
-                        val = _esc(json.dumps(data[k], separators=(', ', ': '), default=str))
+                        val = _fmt_data(data[k]) if isinstance(data[k], dict) else _fmt_val(data[k])
                         _TRUNC_ID += 1
-                        tid = f'trunc-{_TRUNC_ID}'
-                        params += (f'<br><span class="expand-btn" data-target="{tid}">[+]</span> '
-                                   f'<b>{k}:</b> <span class="truncated" id="{tid}">{val}</span>')
+                        t_id = f'trunc-{_TRUNC_ID}'
+                        params += (f'<br><span class="expand-btn" data-target="{t_id}">[+]</span> '
+                                   f'<b>{k}:</b> <span class="truncated" id="{t_id}">{val}</span>')
 
                 mem_kb = e.get('mem_kb') or 0
                 mem_mb = f'<small>{mem_kb / 1024:.1f}</small>' if mem_kb else ''
@@ -176,7 +210,7 @@ def render(entries: list, task_id: str = '') -> str:
 
             elif e['type'] == 'warning':
                 start_pct = (start_offset / (total_ms or 1)) * 100
-                params = _truncatable(_esc(json.dumps(data, separators=(', ', ': '), default=str))) if data else ''
+                params = _truncatable(_fmt_data(data)) if data else ''
                 rest = cols - 2  # remaining cols after %% and Block
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="warn-row"{bg}>'
@@ -187,7 +221,7 @@ def render(entries: list, task_id: str = '') -> str:
 
             elif e['type'] == 'alert':
                 start_pct = (start_offset / (total_ms or 1)) * 100
-                params = _truncatable(_esc(json.dumps(data, separators=(', ', ': '), default=str))) if data else ''
+                params = _truncatable(_fmt_data(data)) if data else ''
                 rest = cols - 2
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="alert-row"{bg}>'
@@ -198,7 +232,7 @@ def render(entries: list, task_id: str = '') -> str:
 
             else:  # info
                 start_pct = (start_offset / (total_ms or 1)) * 100
-                params = _truncatable(_esc(json.dumps(data, separators=(', ', ': '), default=str))) if data else ''
+                params = _truncatable(_fmt_data(data)) if data else ''
                 rest = cols - 2
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="info-row"{bg}>'
