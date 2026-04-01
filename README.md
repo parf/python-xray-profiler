@@ -1,4 +1,4 @@
-# Xray
+# Python XRay Profiler
 
 See through your code. Lightweight execution profiler for Python.
 
