@@ -119,7 +119,6 @@ CSS = '''
 .profiler-report .v-null { color: #aaa; font-style: italic; }
 .profiler-report .v-json { color: #888; font-size: 11px; }
 .profiler-report .start-col { color: #aaa; cursor: help; font-size: 10px; }
-.profiler-report .worker-col { color: #999; font-size: 10px; text-align: center; cursor: help; }
 .profiler-report .indent { color: #ccc; }
 .profiler-report .time-red { background: #fcc; }
 .profiler-report .time-yellow { background: #ffc; }
@@ -161,15 +160,13 @@ def render(entries: list, task_id: str = '') -> str:
     for i, tid in enumerate(sorted(threads)):
         worker_bg[tid] = worker_colors[i % len(worker_colors)]
 
-    cols = 5 if multi else 4
-    w_th = '<th>W</th>' if multi else ''
-    html += f'<tr><th class="r" title="% from start">%%</th><th>Block</th><th>Params</th><th class="r"><small>Mem(MB)</small></th><th class="r">Time(ms)</th>{w_th}</tr>\n'
+    cols = 4
+    html += '<tr><th class="r" title="% from start">%%</th><th>Block</th><th>Params</th><th class="r"><small>Mem(MB)</small></th><th class="r">Time(ms)</th></tr>\n'
 
     for tid in sorted(threads):
         thread_entries = threads[tid]
         thread_spans = [e for e in thread_entries if e['type'] == 'span' and e.get('end')]
         thread_total = sum((e['end'] - e['start']) * 1000 for e in thread_spans)
-        w_num = sorted(threads).index(tid) + 1
 
         if multi:
             html += f'<tr class="thread-sep"><td colspan="{cols + 1}">▸ [{_esc(tid)}] — {len(thread_entries)} entries, {thread_total:.0f}ms</td></tr>\n'
@@ -202,7 +199,6 @@ def render(entries: list, task_id: str = '') -> str:
                 start_pct = (start_offset / (total_ms or 1)) * 100
 
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
-                w_td = f'<td class="worker-col" title="{_esc(tid)}">({w_num})</td>' if multi else ''
 
                 html += f'<tr{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
@@ -210,13 +206,12 @@ def render(entries: list, task_id: str = '') -> str:
                 html += f'<td class="params">{params}</td>'
                 html += f'<td class="r">{mem_mb}</td>'
                 html += f'<td class="r {tcls}">{ms:.1f}</td>'
-                html += f'{w_td}'
                 html += f'</tr>\n'
 
             elif e['type'] == 'warning':
                 start_pct = (start_offset / (total_ms or 1)) * 100
                 params = _truncatable(_fmt_data(data)) if data else ''
-                rest = cols - 2  # remaining cols after %% and Block
+                rest = 2  # remaining cols after %% and Block
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="warn-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
@@ -227,7 +222,7 @@ def render(entries: list, task_id: str = '') -> str:
             elif e['type'] == 'alert':
                 start_pct = (start_offset / (total_ms or 1)) * 100
                 params = _truncatable(_fmt_data(data)) if data else ''
-                rest = cols - 2
+                rest = 2
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="alert-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
@@ -238,7 +233,7 @@ def render(entries: list, task_id: str = '') -> str:
             else:  # info
                 start_pct = (start_offset / (total_ms or 1)) * 100
                 params = _truncatable(_fmt_data(data)) if data else ''
-                rest = cols - 2
+                rest = 2
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="info-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
