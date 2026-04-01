@@ -15,10 +15,10 @@ and where the bottlenecks are.
 ### Key features
 
 - `with Xray.i('name')` — context manager spans with duration + call site + memory
-- method: `@Xray.profile()` — auto-profile a function
-- method: `@Xray.profile('name')` — with custom name
-- class: `@Xray.trace_class()` — auto-profile all public methods
-- class: `@Xray.trace_class(methods=['find'])` — specific methods only
+- decorator (method): `@Xray.profile()` — auto-profile a function
+- decorator (method): `@Xray.profile('name')` — with custom name
+- decorator (class): `@Xray.trace_class()` — auto-profile all public methods
+- decorator (class): `@Xray.trace_class(methods=['find'])` — specific methods only
 - `Xray.info()` / `warning()` / `alert()` — events, checkpoints, error markers
 - **Web panel** — auto-injected HTML report with typed params, expand/collapse, color-coded timing
 - **Instant mode** — real-time stderr with nested outline (like PHP `--profiler=echo`)
