@@ -155,18 +155,40 @@ def index():
     return f'''<!DOCTYPE html>
 <html>
 <head><title>Profiler Web Example</title></head>
-<body style="font-family: sans-serif; padding: 20px; background: #f5f5f5; margin-bottom: 60vh">
-    <h1>📊 Profiler Web Example</h1>
-    <p>This page has auto-profiling. Check the panel at the bottom.</p>
+<body style="font-family: -apple-system, sans-serif; padding: 20px 40px; background: #f5f5f5; margin-bottom: 60vh; max-width: 800px; line-height: 1.6">
+    <h1>📊 Python Profiler — Web Demo</h1>
+
+    <p>Welcome! This page is <b>auto-profiled</b>. Every database query, API call, and cache lookup
+    is tracked and timed. Look at the <b>panel at the bottom</b> of the screen — that's the
+    execution trace of this very page.</p>
+
+    <div style="background:#fff; padding:16px 20px; border-radius:8px; border-left:4px solid #4fc3f7; margin:16px 0">
+        <b>🔍 What happened on this page:</b>
+        <ul style="margin:8px 0">
+            <li>🗄 <b>DB query</b> fetched {len(listings)} listings from Florida</li>
+            <li>🔎 <b>Elasticsearch</b> found {results['hits']} matching results</li>
+            <li>🌍 <b>Geocoding + Classification</b> enriched a sample property</li>
+            <li>🤖 <b>AI classify</b> analyzed "Office space in Miami" with request/response</li>
+            <li>⚠️ A simulated <b>slow query warning</b> and ‼️ <b>timeout alert</b></li>
+        </ul>
+    </div>
+
+    <p>Each operation shows its <b>duration</b>, <b>memory usage</b>, <b>nested children</b>,
+    and <b>typed parameters</b> (strings in green, numbers in teal, booleans in blue).
+    Long values are truncated with a <code>[+]</code> expand button.</p>
+
+    <h3>🚀 More to explore</h3>
     <ul>
-        <li>DB query returned {len(listings)} rows</li>
-        <li>ES search returned {results['hits']} hits</li>
+        <li>📡 <a href="/api/search?q=miami+office">/api/search?q=miami+office</a> — JSON API
+            <span style="color:#888">(profiler key in <code>X-Profiler-Key</code> response header)</span></li>
+        <li>👥 <a href="/threaded">/threaded</a> — multi-worker demo
+            <span style="color:#888">(two iframe workers share the same profiler task-id)</span></li>
     </ul>
-    <h3>Try also:</h3>
-    <ul>
-        <li><a href="/api/search?q=miami+office">/api/search?q=miami+office</a> — JSON API (check X-Profiler-Key header)</li>
-        <li><a href="/threaded">/threaded</a> — multi-worker example (iframes with shared task-id)</li>
-    </ul>
+
+    <p style="color:#999; font-size:13px; margin-top:24px">
+        ↓ Scroll down or click the red bar to see the profiler panel.
+        Click <b>open ↗</b> to view the report in a standalone page.
+    </p>
 </body>
 </html>'''
 
