@@ -235,6 +235,7 @@ def worker_iframe():
 
         Profiler.info(f'{worker_name}::done')
 
+    Profiler.finish()
     return f'<html><body style="font:11px monospace;color:#888">✓ {worker_name} done</body></html>'
 
 
