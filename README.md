@@ -13,6 +13,8 @@ Optional support for distributed tasks (Celery, multiprocessing) via shared Redi
 - **Report** — `Xray.report()` prints color-coded tree grouped by worker
 - **Zero overhead** — disabled profiler returns no-op objects, no conditionals needed
 
+![Xray Web Report](screenshot.png)
+
 ## Quick Start
 
 ```python
