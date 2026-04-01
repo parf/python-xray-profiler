@@ -35,7 +35,7 @@ def start_profiler():
         return  # profiler endpoint + worker iframes handle their own init
     task_id = f'web-{uuid4().hex[:8]}'
     request.environ['profiler_task_id'] = task_id
-    Xray.init(r, task_id, context={'method': request.method, 'path': request.path})
+    Xray.init(r, task_id)
 
 
 @app.after_request
@@ -272,7 +272,7 @@ def worker_iframe():
     if not task_id:
         return 'Missing task_id', 400
 
-    Xray.init(r, task_id, thread_id=worker_name, context={'worker': worker_name})
+    Xray.init(r, task_id, thread_id=worker_name)
 
     with Xray.i(f'{worker_name}::run'):
         # Simulate worker doing its own DB + API work

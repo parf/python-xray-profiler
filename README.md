@@ -23,7 +23,6 @@ and parameters. No decorators, no context managers, no refactoring needed.
 
 ### Key features
 
-- `with Xray.i('name')` — context manager spans with duration + call site + memory
 - decorator (method): `@Xray.profile()` — auto-profile a function
 - decorator (method): `@Xray.profile('name')` — with custom name
 - decorator (class): `@Xray.trace_class()` — auto-profile all public methods
@@ -46,7 +45,7 @@ and parameters. No decorators, no context managers, no refactoring needed.
 from xray import Xray
 import redis
 
-Xray.init(redis.Redis(host='redis'), 'my-task-123', context={'user_id': 42})
+Xray.init(redis.Redis(host='redis'), 'my-task-123')
 
 with Xray.i('ES::search', {'query': q}) as span:
     results = es.search(q)
@@ -131,8 +130,7 @@ Xray.patch(RedisCache)
 ```
 
 Call `Xray.patch()` once at application startup. Every subsequent call to the
-patched methods is automatically profiled — no decorators, no context managers,
-no changes to the original code.
+patched methods is automatically profiled — no changes to the original code.
 
 ## Closure Wrapper
 
@@ -152,7 +150,7 @@ Xray.alert('timeout', {'url': url, 'after_ms': 5000})
 
 ```python
 # Redis mode — store entries, read report later
-Xray.init(redis_client, task_id, thread_id=None, context=None)
+Xray.init(redis_client, task_id, thread_id=None)
 
 # Instant mode — real-time stderr output
 Xray.init_instant()
@@ -162,7 +160,6 @@ Xray.disable()
 ```
 
 `thread_id` defaults to `threading.current_thread().name`.
-`context` is attached to every entry (request info, user_id, etc).
 
 ## Reading Results
 

@@ -22,7 +22,6 @@ Each element: JSON string
   "end": 1711900000.456,                  // null for info/warning/alert
   "mem_kb": 55296,                        // RSS at push time
   "data": {"query": "miami", "count": 150},
-  "context": {"user_id": 42},             // from Xray.init(context=...)
   "caller": [                             // call stack (up to 3 frames)
     "app/tasks.py:45 search_listings()",
     "app/es.py:120 search()",
@@ -45,7 +44,7 @@ Duration = `end - start` (computed by reader, not stored).
 ## Thread-Local State
 
 All mutable state lives in `threading.local()` — each thread/request gets its own:
-- `task_id`, `thread_id`, `stack`, `root_span`, `start_time`, `enabled`, `instant`
+- `task_id`, `thread_id`, `stack`, `root_span`, `start_time`, `enabled`
 
 Only `_redis` is shared (thread-safe Redis client).
 

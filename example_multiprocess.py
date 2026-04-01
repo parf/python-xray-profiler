@@ -31,7 +31,7 @@ def worker(worker_id: int, instant: bool = False):
         Xray.init_instant(thread_id=f'worker-{worker_id}')
     else:
         r = redis.Redis(host=REDIS_HOST)
-        Xray.init(r, TASK_ID, thread_id=f'worker-{worker_id}', context={'worker': worker_id})
+        Xray.init(r, TASK_ID, thread_id=f'worker-{worker_id}')
 
     Xray.info('worker-start', {'pid': multiprocessing.current_process().pid})
 

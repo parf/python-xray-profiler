@@ -9,7 +9,7 @@ Usage:
     import redis
 
     # Redis mode — store in Redis list
-    Xray.init(redis.Redis(), 'task-123', context={'user_id': 42})
+    Xray.init(redis.Redis(), 'task-123')
 
     # Instant mode — echo to stderr (like PHP --profiler=echo)
     Xray.init_instant()
@@ -56,7 +56,6 @@ class Xray:
             tl.enabled = False
             tl.task_id = None
             tl.thread_id = None
-            tl.default_context = {}
             tl.instant = False
             tl.start_time = 0
             tl.stack = []
@@ -66,13 +65,13 @@ class Xray:
     # --- Setup ---
 
     @classmethod
-    def init(cls, redis_client, task_id: str, thread_id: str = None, context: dict = None, instant: bool = False):
-        """Init profiler for a task. Call once per task/request."""
+    def init(cls, redis_client, task_id: str = None, thread_id: str = None, instant: bool = False):
+        """Init profiler for a task. Call once per task/request. task_id auto-generated if not set."""
+        from uuid import uuid4
         cls._redis = redis_client
         tl = cls._tl()
-        tl.task_id = task_id
+        tl.task_id = task_id or f'xray-{uuid4().hex[:8]}'
         tl.thread_id = thread_id or threading.current_thread().name
-        tl.default_context = context or {}
         tl.enabled = True
         tl.instant = instant
         tl.start_time = time.time()
@@ -102,6 +101,11 @@ class Xray:
         tl.root_span = cls.i(thread_id or 'PROFILER')
         tl.root_span.__enter__()
         atexit.register(cls.finish)
+
+    @classmethod
+    def task_id(cls) -> str:
+        """Current task ID (auto-generated if not set in init)."""
+        return cls._tl().task_id or ''
 
     @classmethod
     def finish(cls):
@@ -376,7 +380,6 @@ class Xray:
             'end': end,
             'mem_kb': _mem_kb(),
             'data': data,
-            'context': cls._tl().default_context,
             'caller': _caller_stack(3),
         }
         key = f'xray:{cls._tl().task_id}'
