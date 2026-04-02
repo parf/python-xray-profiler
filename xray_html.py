@@ -215,7 +215,7 @@ def render(entries: list, task_id: str = '') -> str:
     html += '<table>\n'
     multi = len(threads) > 1
     # Assign colors to workers
-    worker_colors = ['#fff', '#f0f4ff', '#fff8f0', '#f0fff4', '#fff0f8', '#f8f0ff', '#f0ffff', '#fffff0']
+    worker_colors = ['#fff', '#fff8f0', '#f0fff4', '#fff0f8', '#f8f0ff', '#f0ffff', '#fffff0', '#f7f7f7']
     worker_bg = {}
     for i, tid in enumerate(sorted(threads)):
         worker_bg[tid] = worker_colors[i % len(worker_colors)]
