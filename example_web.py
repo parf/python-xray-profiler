@@ -34,18 +34,11 @@ class SearchContext:
 
 @app.before_request
 def start_profiler():
-    # ON/OFF logic lives here:
-    # - turn profiler ON for developers
-    # - turn profiler OFF for visitors
-    #
-    # Example:
-    # if request.args.get('xray') == '1':
+    # ON/OFF logic example:
+    # if request.args.get('xray') == '1':  # turn ON for developers
     #     Xray.init(r)  # task_id auto-generated
-    # else:
+    # else:  # turn OFF for visitors
     #     Xray.init(False)
-    #
-    # This demo keeps profiling enabled for normal app pages and disabled for
-    # profiler/worker endpoints that should not attach the profiler UI.
     if request.path in ('/_profiler', '/_profiler/json', '/worker'):
         request.environ['xray_attach_profiler'] = False
         Xray.init(False)  # explicit no-op init for requests that should not attach profiler UI
