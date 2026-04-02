@@ -34,8 +34,11 @@ class SearchContext:
 
 @app.before_request
 def start_profiler():
-    if request.path in ('/_profiler', '/worker'):
-        return  # profiler endpoint + worker iframes handle their own init
+    if request.path in ('/_profiler', '/_profiler/json', '/worker'):
+        request.environ['xray_attach_profiler'] = False
+        Xray.init(False)  # explicit no-op init for requests that should not attach profiler UI
+        return
+    request.environ['xray_attach_profiler'] = True
     task_id = f'web-{uuid4().hex[:8]}'
     request.environ['profiler_task_id'] = task_id
     Xray.init(r, task_id)
@@ -43,12 +46,10 @@ def start_profiler():
 
 @app.after_request
 def attach_profiler(response):
-    task_id = request.environ.get('profiler_task_id')
-    if not task_id:
+    if not request.environ.get('xray_attach_profiler', True):
         return response
     return Xray.attach_profiler(
         response,
-        task_id=task_id,
         endpoint='/_profiler',
         delay_ms=int(request.environ.get('profiler_delay_ms', 0)),
         wait_iframes=bool(request.environ.get('profiler_wait_iframes', False)),

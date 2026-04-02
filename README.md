@@ -283,14 +283,21 @@ Use `Xray.attach_profiler()` in web middleware when you want the library to:
 Example:
 
 ```python
+@app.before_request
+def start_profiler():
+    if request.path in ('/_profiler', '/_profiler/json', '/worker'):
+        request.environ['xray_attach_profiler'] = False
+        Xray.init(False)  # explicit no-op init for requests that should not attach profiler UI
+        return
+    request.environ['xray_attach_profiler'] = True
+    Xray.init(redis_client, f'web-{uuid4().hex[:8]}')
+
 @app.after_request
 def attach_profiler(response):
-    task_id = request.environ.get('profiler_task_id')
-    if not task_id:
+    if not request.environ.get('xray_attach_profiler', True):
         return response
     return Xray.attach_profiler(
         response,
-        task_id=task_id,
         endpoint='/_profiler',
         delay_ms=int(request.environ.get('profiler_delay_ms', 0)),
         wait_iframes=bool(request.environ.get('profiler_wait_iframes', False)),
@@ -298,6 +305,18 @@ def attach_profiler(response):
 ```
 
 This keeps framework glue thin and moves profiler-specific response handling into the library.
+
+The profiler panel fetches its HTML from a standalone endpoint:
+
+```python
+@app.route('/_profiler')
+def profiler_view():
+    task_id = request.args.get('k', '')
+    if not task_id:
+        return 'Missing ?k= parameter', 400
+    Xray._redis = redis_client
+    return Xray.html_report(task_id)
+```
 
 ## See Also
 
