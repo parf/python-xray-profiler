@@ -285,12 +285,22 @@ Example:
 ```python
 @app.before_request
 def start_profiler():
+    # ON/OFF logic lives here:
+    # - turn profiler ON for developers
+    # - turn profiler OFF for visitors
+    #
+    # Example:
+    # if request.args.get('xray') == '1':
+    #     Xray.init(redis_client)  # task_id auto-generated
+    # else:
+    #     Xray.init(False)
+    #
     if request.path in ('/_profiler', '/_profiler/json', '/worker'):
         request.environ['xray_attach_profiler'] = False
         Xray.init(False)  # explicit no-op init for requests that should not attach profiler UI
         return
     request.environ['xray_attach_profiler'] = True
-    Xray.init(redis_client, f'web-{uuid4().hex[:8]}')
+    Xray.init(redis_client)  # task_id auto-generated
 
 @app.after_request
 def attach_profiler(response):
@@ -299,8 +309,6 @@ def attach_profiler(response):
     return Xray.attach_profiler(
         response,
         endpoint='/_profiler',
-        delay_ms=int(request.environ.get('profiler_delay_ms', 0)),
-        wait_iframes=bool(request.environ.get('profiler_wait_iframes', False)),
     )
 ```
 
