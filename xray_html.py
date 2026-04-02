@@ -97,10 +97,13 @@ CSS = '''
     overflow-x: auto;
 }
 .profiler-report h3 {
-    text-align: center;
+    text-align: left;
     margin: 6px 0;
+    padding: 4px 6px;
     font-size: 13px;
     color: #333;
+    background: #eef6ff;
+    border-left: 3px solid #b7d7f5;
 }
 .profiler-report table {
     width: 100%;
@@ -145,6 +148,9 @@ CSS = '''
 .profiler-report .alert-row .block { color: #c00; }
 .profiler-report .info-row { color: #999; }
 .profiler-report .info-row .block { color: #888; font-weight: normal; }
+.profiler-report .event-badge { display: inline-block; padding: 0 5px; border-radius: 3px; color: #fff; font-size: 10px; line-height: 1.4; margin-right: 4px; vertical-align: 1px; }
+.profiler-report .event-badge.warn { background: #f90; }
+.profiler-report .event-badge.alert { background: #c00; }
 .profiler-report .thread-sep td { background: #e8e8ff; font-weight: bold; padding: 4px 6px; }
 .profiler-report .coverage-wrap { margin: 2px 0 1px; }
 .profiler-report .coverage-thread { margin: 1px 0; }
@@ -268,7 +274,7 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="warn-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
-                html += f'<td>{indent}⚠ <span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td>{indent}<span class="event-badge warn">⚠</span><span class="block">{_esc(e["name"])}</span></td>'
                 html += f'<td class="params">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
 
@@ -279,7 +285,7 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="alert-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
-                html += f'<td>{indent}‼ <span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td>{indent}<span class="event-badge alert">‼</span><span class="block">{_esc(e["name"])}</span></td>'
                 html += f'<td class="params">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
 
@@ -315,7 +321,7 @@ def render(entries: list, task_id: str = '') -> str:
             html += f'</tr>\n'
         html += '</table>\n'
 
-    html += '<h3>Coverage</h3>\n<div class="coverage-wrap">\n'
+    html += '<h3>▦ Coverage</h3>\n<div class="coverage-wrap">\n'
     coverage_palette = ['#4fc3f7', '#81c784', '#ffb74d', '#e57373', '#ba68c8', '#ffd54f', '#4db6ac', '#90a4ae']
     for tid in sorted(threads):
         thread_spans = [
