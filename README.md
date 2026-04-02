@@ -283,21 +283,13 @@ Example:
 @app.before_request
 def start_profiler():
     # ON/OFF logic example:
-    # if request.args.get('xray') == '1':  # turn ON for developers
-    #     Xray.init(redis_client)  # task_id auto-generated
-    # else:  # turn OFF for visitors
-    #     Xray.init(False)
-    #
-    if request.path in ('/_profiler', '/_profiler/json', '/worker'):
-        request.environ['xray_attach_profiler'] = False
-        Xray.init(False)  # explicit no-op init for requests that should not attach profiler UI
-        return
-    request.environ['xray_attach_profiler'] = True
-    Xray.init(redis_client)  # task_id auto-generated
+    # want_xray = isDeveloper()  # turn ON for developers, OFF for visitors
+    want_xray = False if request.path.startswith('/_profiler') else True
+    Xray.init(redis_client if want_xray else False)  # task_id auto-generated when enabled
 
 @app.after_request
 def attach_profiler(response):
-    if not request.environ.get('xray_attach_profiler', True):
+    if not Xray.task_id():
         return response
     return Xray.attach_profiler(
         response,

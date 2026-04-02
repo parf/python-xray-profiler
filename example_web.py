@@ -15,10 +15,9 @@ Usage:
 
 import random
 import time
-from uuid import uuid4
 
 import redis
-from flask import Flask, Response, request, jsonify
+from flask import Flask, Response, g, request, jsonify
 
 from xray import Xray
 
@@ -35,29 +34,22 @@ class SearchContext:
 @app.before_request
 def start_profiler():
     # ON/OFF logic example:
-    # if request.args.get('xray') == '1':  # turn ON for developers
-    #     Xray.init(r)  # task_id auto-generated
-    # else:  # turn OFF for visitors
-    #     Xray.init(False)
-    if request.path in ('/_profiler', '/_profiler/json', '/worker'):
-        request.environ['xray_attach_profiler'] = False
-        Xray.init(False)  # explicit no-op init for requests that should not attach profiler UI
-        return
-    request.environ['xray_attach_profiler'] = True
-    task_id = f'web-{uuid4().hex[:8]}'
-    request.environ['profiler_task_id'] = task_id
-    Xray.init(r, task_id)
+    # want_xray = isDeveloper()  # turn ON for developers, OFF for visitors
+    # Skip auto-profiling for profiler endpoints and /worker:
+    # /_profiler* renders reports, /worker initializes its own shared task-id later.
+    want_xray = False if request.path in ('/_profiler', '/_profiler/json', '/worker') else True
+    Xray.init(r if want_xray else False)  # task_id auto-generated when enabled
+    g.profiler_wait_iframes = want_xray and request.path == '/threaded'
 
 
 @app.after_request
 def attach_profiler(response):
-    if not request.environ.get('xray_attach_profiler', True):
+    if request.path == '/worker' or not Xray.task_id():
         return response
     return Xray.attach_profiler(
         response,
         endpoint='/_profiler',
-        delay_ms=int(request.environ.get('profiler_delay_ms', 0)),
-        wait_iframes=bool(request.environ.get('profiler_wait_iframes', False)),
+        wait_iframes=getattr(g, 'profiler_wait_iframes', False),
     )
 
 
@@ -161,7 +153,7 @@ def index():
 
         Xray.info('request-done')
 
-    task_id = request.environ['profiler_task_id']
+    task_id = Xray.task_id()
 
     return f'''<!DOCTYPE html>
 <html>
@@ -212,8 +204,7 @@ def threaded():
         listings = sim_db_query('listings', 'state=NY')
         results = sim_es_search('listing', 'boston warehouse')
 
-    task_id = request.environ['profiler_task_id']
-    request.environ['profiler_wait_iframes'] = True  # load profiler after all iframes done
+    task_id = Xray.task_id()
 
     return f'''<!DOCTYPE html>
 <html>
@@ -260,7 +251,7 @@ def api_search():
         'query': q,
         'hits': results['hits'],
         'classification': classification,
-        'profiler': request.environ.get('profiler_task_id'),
+        'profiler': Xray.task_id(),
     })
 
 
