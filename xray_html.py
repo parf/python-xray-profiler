@@ -86,6 +86,12 @@ def _merged_duration_ms(spans: list) -> float:
     return sum((end - start) * 1000 for start, end in merged)
 
 
+def _fmt_metric(value: float) -> str:
+    """Render a 1-decimal metric with a smaller fractional part."""
+    whole, frac = f'{value:.1f}'.split('.')
+    return f'{whole}<span class="metric-frac">.{frac}</span>'
+
+
 CSS = '''
 <style>
 .profiler-report {
@@ -128,6 +134,7 @@ CSS = '''
 .profiler-report tr:hover { background: #f8f8f0; }
 .profiler-report .block { font-weight: bold; color: #333; }
 .profiler-report .params { color: #888; font-weight: normal; max-width: 700px; word-break: break-all; white-space: normal; }
+.profiler-report .metric-frac { font-size: 8px; vertical-align: 1px; }
 .profiler-report .truncated { display: inline; }
 .profiler-report .truncated:not(.expanded) { display: -webkit-inline-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; vertical-align: top; word-break: break-all; }
 .profiler-report .truncated.expanded { word-break: break-all; }
@@ -212,16 +219,16 @@ def render(entries: list, task_id: str = '') -> str:
         thread_end_offset = ((root['end'] - first_start) * 1000) if root and root.get('end') else thread_start_offset
         thread_end_pct = (thread_end_offset / (total_ms or 1)) * 100
         thread_mem = root.get('mem_kb', 0) if root else 0
-        thread_mem_str = f'<small>{thread_mem / 1024:.1f}</small>' if thread_mem else ''
+        thread_mem_str = _fmt_metric(thread_mem / 1024) if thread_mem else ''
         tcls = _time_class(thread_total, total_ms)
         bg = f' style="background:{worker_bg[tid]}"' if multi else ''
         html += f'<tr class="thread-sep"{bg}>'
-        html += f'<td class="r start-col" title="{thread_start_offset:,.1f}ms from start">{thread_start_pct:.1f}</td>'
+        html += f'<td class="r start-col" title="{thread_start_offset:,.1f}ms from start">{_fmt_metric(thread_start_pct)}</td>'
         html += f'<td><b>{_esc(tid)}</b></td>'
         html += f'<td class="params">{len(thread_entries)} entries</td>'
         html += f'<td class="r">{thread_mem_str}</td>'
-        html += f'<td class="r {tcls}">{thread_total:.1f}</td>'
-        html += f'<td class="r start-col" title="{thread_end_offset:,.1f}ms from start">{thread_end_pct:.1f}</td>'
+        html += f'<td class="r {tcls}">{_fmt_metric(thread_total)}</td>'
+        html += f'<td class="r start-col" title="{thread_end_offset:,.1f}ms from start">{_fmt_metric(thread_end_pct)}</td>'
         html += f'</tr>\n'
 
         for e in thread_entries:
@@ -246,11 +253,12 @@ def render(entries: list, task_id: str = '') -> str:
                         val = _fmt_data(data[k]) if isinstance(data[k], dict) else _fmt_val(data[k])
                         _TRUNC_ID += 1
                         t_id = f'trunc-{_TRUNC_ID}'
-                        params += (f'<br><span class="expand-btn" data-target="{t_id}">[+]</span> '
+                        prefix = '<br>' if params else ''
+                        params += (f'{prefix}<span class="expand-btn" data-target="{t_id}">[+]</span> '
                                    f'<b>{k}:</b> <span class="truncated" id="{t_id}">{val}</span>')
 
                 mem_kb = e.get('mem_kb') or 0
-                mem_mb = f'<small>{mem_kb / 1024:.1f}</small>' if mem_kb else ''
+                mem_mb = _fmt_metric(mem_kb / 1024) if mem_kb else ''
 
                 end_offset = (e['end'] - first_start) * 1000
                 start_pct = (start_offset / (total_ms or 1)) * 100
@@ -259,12 +267,12 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
 
                 html += f'<tr{bg}>'
-                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
+                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
                 html += f'<td>{indent}<span class="block">{_esc(e["name"])}</span></td>'
                 html += f'<td class="params">{params}</td>'
                 html += f'<td class="r">{mem_mb}</td>'
-                html += f'<td class="r {tcls}">{ms:.1f}</td>'
-                html += f'<td class="r start-col" title="{end_offset:,.1f}ms from start">{end_pct:.1f}</td>'
+                html += f'<td class="r {tcls}">{_fmt_metric(ms)}</td>'
+                html += f'<td class="r start-col" title="{end_offset:,.1f}ms from start">{_fmt_metric(end_pct)}</td>'
                 html += f'</tr>\n'
 
             elif e['type'] == 'warning':
@@ -273,7 +281,7 @@ def render(entries: list, task_id: str = '') -> str:
                 rest = 2  # remaining cols after %% and Block
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="warn-row"{bg}>'
-                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
+                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
                 html += f'<td>{indent}<span class="event-badge warn">⚠</span><span class="block">{_esc(e["name"])}</span></td>'
                 html += f'<td class="params">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
@@ -284,7 +292,7 @@ def render(entries: list, task_id: str = '') -> str:
                 rest = 2
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="alert-row"{bg}>'
-                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
+                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
                 html += f'<td>{indent}<span class="event-badge alert">‼</span><span class="block">{_esc(e["name"])}</span></td>'
                 html += f'<td class="params">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
@@ -295,7 +303,7 @@ def render(entries: list, task_id: str = '') -> str:
                 rest = 2
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="info-row"{bg}>'
-                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{start_pct:.1f}</td>'
+                html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
                 html += f'<td>{indent}· <span class="block">{_esc(e["name"])}</span></td>'
                 html += f'<td class="params">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
@@ -315,7 +323,7 @@ def render(entries: list, task_id: str = '') -> str:
             ms = (e['end'] - e['start']) * 1000
             tcls = _time_class(ms, total_ms)
             html += f'<tr><td class="block">{_esc(e["name"])}</td>'
-            html += f'<td class="r {tcls}">{ms:.1f}</td>'
+            html += f'<td class="r {tcls}">{_fmt_metric(ms)}</td>'
             if multi:
                 html += f'<td class="params">{_esc(e.get("thread_id", "?"))}</td>'
             html += f'</tr>\n'
