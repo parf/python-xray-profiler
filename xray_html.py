@@ -69,6 +69,23 @@ def _time_class(ms: float, total_ms: float) -> str:
     return ''
 
 
+def _merged_duration_ms(spans: list) -> float:
+    """Total covered time across overlapping spans, in ms."""
+    intervals = sorted((e['start'], e['end']) for e in spans if e.get('end'))
+    if not intervals:
+        return 0.0
+    merged = []
+    cur_start, cur_end = intervals[0]
+    for start, end in intervals[1:]:
+        if start <= cur_end:
+            cur_end = max(cur_end, end)
+        else:
+            merged.append((cur_start, cur_end))
+            cur_start, cur_end = start, end
+    merged.append((cur_start, cur_end))
+    return sum((end - start) * 1000 for start, end in merged)
+
+
 CSS = '''
 <style>
 .profiler-report {
@@ -129,6 +146,13 @@ CSS = '''
 .profiler-report .info-row { color: #999; }
 .profiler-report .info-row .block { color: #888; font-weight: normal; }
 .profiler-report .thread-sep td { background: #e8e8ff; font-weight: bold; padding: 4px 6px; }
+.profiler-report .coverage-wrap { margin: 2px 0 1px; }
+.profiler-report .coverage-thread { margin: 1px 0; }
+.profiler-report .coverage-row { display: flex; align-items: center; gap: 4px; margin: 0; }
+.profiler-report .coverage-track { position: relative; flex: 1; height: 6px; border: 1px solid #ddd; background: #fafafa; border-radius: 999px; overflow: hidden; }
+.profiler-report .coverage-fill { position: absolute; top: 0; bottom: 0; border-radius: 999px; min-width: 2px; opacity: 0.95; }
+.profiler-report .coverage-meta { width: 38px; text-align: right; color: #999; font-size: 9px; line-height: 1; }
+.profiler-report .coverage-meta.blank { color: transparent; user-select: none; }
 </style>
 '''
 
@@ -290,6 +314,41 @@ def render(entries: list, task_id: str = '') -> str:
                 html += f'<td class="params">{_esc(e.get("thread_id", "?"))}</td>'
             html += f'</tr>\n'
         html += '</table>\n'
+
+    html += '<h3>Coverage</h3>\n<div class="coverage-wrap">\n'
+    coverage_palette = ['#4fc3f7', '#81c784', '#ffb74d', '#e57373', '#ba68c8', '#ffd54f', '#4db6ac', '#90a4ae']
+    for tid in sorted(threads):
+        thread_spans = [
+            e for e in threads[tid]
+            if e['type'] == 'span' and e.get('end') and e.get('depth', 0) > 0
+        ]
+        if not thread_spans:
+            continue
+        thread_busy_ms = _merged_duration_ms(thread_spans)
+        coverage_pct = (thread_busy_ms / (total_ms or 1)) * 100
+        max_depth = max(e.get('depth', 0) for e in thread_spans)
+        html += '<div class="coverage-thread">\n'
+        for depth in range(1, max_depth + 1):
+            level_spans = [e for e in thread_spans if e.get('depth', 0) == depth]
+            if not level_spans:
+                continue
+            html += '<div class="coverage-row">'
+            title = f'{tid}: {thread_busy_ms:.1f}ms profiled busy time ({coverage_pct:.1f}% of total)' if depth == 1 else f'{tid}: nested spans depth {depth}'
+            html += f'<div class="coverage-track" title="{title}">'
+            for i, e in enumerate(level_spans):
+                left = (((e['start'] - first_start) * 1000) / (total_ms or 1)) * 100
+                width = (((e['end'] - e['start']) * 1000) / (total_ms or 1)) * 100
+                color = coverage_palette[(depth + i) % len(coverage_palette)]
+                label = _esc(e["name"])
+                ms = (e['end'] - e['start']) * 1000
+                html += f'<span class="coverage-fill" title="{label} ({ms:.1f}ms)" style="left:{left:.3f}%;width:max({width:.3f}%, 2px);background:{color}"></span>'
+            html += '</div>'
+            meta_class = 'coverage-meta' if depth == 1 else 'coverage-meta blank'
+            meta_value = f'{coverage_pct:.1f}%' if depth == 1 else '&nbsp;'
+            html += f'<div class="{meta_class}">{meta_value}</div>'
+            html += '</div>\n'
+        html += '</div>\n'
+    html += '</div>\n'
 
     html += '</div>\n'
     return html
