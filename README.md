@@ -239,6 +239,14 @@ python3 example_multiprocess.py --default    # 3 workers + Redis report
 python3 example_multiprocess.py --instant    # real-time stderr output
 ```
 
+Grouped CLI report:
+
+![Xray CLI Report](screenshot_cli.png)
+
+Instant stderr output:
+
+![Xray Instant Report](screenshot_instant.png)
+
 ### Web (Flask)
 
 ```bash
