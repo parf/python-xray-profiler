@@ -160,8 +160,8 @@ def render(entries: list, task_id: str = '') -> str:
     for i, tid in enumerate(sorted(threads)):
         worker_bg[tid] = worker_colors[i % len(worker_colors)]
 
-    cols = 4
-    html += '<tr><th class="r" title="% from start">%%</th><th>Block</th><th>Params</th><th class="r"><small>Mem(MB)</small></th><th class="r">Time(ms)</th></tr>\n'
+    cols = 5
+    html += '<tr><th class="r" title="% from start">%%</th><th>Block</th><th>Params</th><th class="r"><small>Mem(MB)</small></th><th class="r">Time(ms)</th><th class="r" title="% when finished">%%</th></tr>\n'
 
     for tid in sorted(threads):
         thread_entries = threads[tid]
@@ -179,6 +179,8 @@ def render(entries: list, task_id: str = '') -> str:
         root = root_spans[0] if root_spans else None
         thread_start_offset = ((root['start'] - first_start) * 1000) if root else 0
         thread_start_pct = (thread_start_offset / (total_ms or 1)) * 100
+        thread_end_offset = ((root['end'] - first_start) * 1000) if root and root.get('end') else thread_start_offset
+        thread_end_pct = (thread_end_offset / (total_ms or 1)) * 100
         thread_mem = root.get('mem_kb', 0) if root else 0
         thread_mem_str = f'<small>{thread_mem / 1024:.1f}</small>' if thread_mem else ''
         tcls = _time_class(thread_total, total_ms)
@@ -189,6 +191,7 @@ def render(entries: list, task_id: str = '') -> str:
         html += f'<td class="params">{len(thread_entries)} entries</td>'
         html += f'<td class="r">{thread_mem_str}</td>'
         html += f'<td class="r {tcls}">{thread_total:.1f}</td>'
+        html += f'<td class="r start-col" title="{thread_end_offset:,.1f}ms from start">{thread_end_pct:.1f}</td>'
         html += f'</tr>\n'
 
         for e in thread_entries:
@@ -219,7 +222,9 @@ def render(entries: list, task_id: str = '') -> str:
                 mem_kb = e.get('mem_kb') or 0
                 mem_mb = f'<small>{mem_kb / 1024:.1f}</small>' if mem_kb else ''
 
+                end_offset = (e['end'] - first_start) * 1000
                 start_pct = (start_offset / (total_ms or 1)) * 100
+                end_pct = (end_offset / (total_ms or 1)) * 100
 
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
 
@@ -229,6 +234,7 @@ def render(entries: list, task_id: str = '') -> str:
                 html += f'<td class="params">{params}</td>'
                 html += f'<td class="r">{mem_mb}</td>'
                 html += f'<td class="r {tcls}">{ms:.1f}</td>'
+                html += f'<td class="r start-col" title="{end_offset:,.1f}ms from start">{end_pct:.1f}</td>'
                 html += f'</tr>\n'
 
             elif e['type'] == 'warning':
