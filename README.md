@@ -275,10 +275,7 @@ Open http://localhost:5000/ — auto-profiled page with execution panel at the b
 
 ## Attach Profiler To Response
 
-Use `Xray.attach_profiler()` in web middleware when you want the library to:
-- close the current profiling session
-- inject the HTML profiler panel into HTML responses
-- add `X-Profiler-Key` and `X-Profiler-URL` headers
+Use `Xray.attach_profiler()` in web middleware to automatically add a collapsible profiler panel at the bottom of the page, while keeping the response integration inside the library.
 
 Example:
 
@@ -308,7 +305,7 @@ def attach_profiler(response):
     )
 ```
 
-This keeps framework glue thin and moves profiler-specific response handling into the library.
+This keeps web integration minimal and moves profiler response handling into the library.
 
 The profiler panel fetches its HTML from a standalone endpoint:
 
