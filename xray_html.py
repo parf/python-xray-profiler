@@ -169,13 +169,18 @@ CSS = '''
 .profiler-report .event-badge.warn { background: #f90; }
 .profiler-report .event-badge.alert { background: #c00; }
 .profiler-report .thread-sep td { background: #e8e8ff; font-weight: bold; padding: 4px 6px; }
+.profiler-report .summary-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 12px; align-items: start; margin-top: 8px; }
+.profiler-report .summary-grid table { margin: 0; }
+.profiler-report .summary-grid h3 { margin-top: 0; }
+.profiler-report .summary-col { min-width: 0; }
 .profiler-report .coverage-wrap { margin: 2px 0 8px; }
 .profiler-report .coverage-thread { margin: 1px 0; }
-.profiler-report .coverage-row { display: flex; align-items: center; gap: 4px; margin: 0; }
-.profiler-report .coverage-track { position: relative; flex: 1; height: 6px; border: 1px solid #ddd; background: #fafafa; border-radius: 999px; overflow: hidden; }
+.profiler-report .coverage-row { display: flex; align-items: center; gap: 0; margin: 0; }
+.profiler-report .coverage-track { position: relative; flex: 1; height: 9px; border: 1px solid #ddd; background: #fafafa; border-radius: 999px; overflow: hidden; }
 .profiler-report .coverage-fill { position: absolute; top: 0; bottom: 0; border-radius: 999px; min-width: 2px; opacity: 0.95; }
-.profiler-report .coverage-meta { width: 38px; text-align: right; color: #999; font-size: 9px; line-height: 1; }
-.profiler-report .coverage-meta.blank { color: transparent; user-select: none; }
+@media (max-width: 900px) {
+    .profiler-report .summary-grid { grid-template-columns: 1fr; }
+}
 </style>
 '''
 
@@ -320,26 +325,20 @@ def render(entries: list, task_id: str = '') -> str:
 
     html += '</table>\n'
 
-    # Top 5 slowest
-    non_root = [e for e in spans if e.get('depth', 0) > 0]
-    top = sorted(non_root, key=lambda e: e['end'] - e['start'], reverse=True)[:5]
-    if top:
-        html += '<h3>🔥 Top 5 slowest</h3>\n<table>\n'
-        html += '<tr><th>Block</th><th class="r">Time(ms)</th>'
-        if multi:
-            html += '<th>Worker</th>'
-        html += '</tr>\n'
-        for e in top:
-            ms = (e['end'] - e['start']) * 1000
-            tcls = _time_class(ms, total_ms)
-            html += f'<tr><td class="block">{_esc(e["name"])}</td>'
-            html += f'<td class="r {tcls}">{_fmt_metric(ms)}</td>'
-            if multi:
-                html += f'<td class="params">{_esc(e.get("thread_id", "?"))}</td>'
-            html += f'</tr>\n'
-        html += '</table>\n'
+    html += '<div class="summary-grid">\n'
+    coverage_totals = []
+    for tid in sorted(threads):
+        thread_spans = [
+            e for e in threads[tid]
+            if e['type'] == 'span' and e.get('end') and e.get('depth', 0) > 0
+        ]
+        if not thread_spans:
+            continue
+        coverage_totals.append(_merged_duration_ms(thread_spans))
+    overall_coverage_pct = (sum(coverage_totals) / ((total_ms or 1) * max(len(coverage_totals), 1))) * 100 if coverage_totals else 0
 
-    html += '<h3>▦ Coverage</h3>\n<div class="coverage-wrap">\n'
+    html += '<div class="summary-col">\n'
+    html += f'<h3>▦ Coverage <small>{overall_coverage_pct:.1f}%</small></h3>\n<div class="coverage-wrap">\n'
     coverage_palette = ['#4fc3f7', '#81c784', '#ffb74d', '#e57373', '#ba68c8', '#ffd54f', '#4db6ac', '#90a4ae']
     for tid in sorted(threads):
         thread_spans = [
@@ -367,11 +366,32 @@ def render(entries: list, task_id: str = '') -> str:
                 ms = (e['end'] - e['start']) * 1000
                 html += f'<span class="coverage-fill" title="{label} ({ms:.1f}ms)" style="left:{left:.3f}%;width:max({width:.3f}%, 2px);background:{color}"></span>'
             html += '</div>'
-            meta_class = 'coverage-meta' if depth == 1 else 'coverage-meta blank'
-            meta_value = f'{coverage_pct:.1f}%' if depth == 1 else '&nbsp;'
-            html += f'<div class="{meta_class}">{meta_value}</div>'
             html += '</div>\n'
         html += '</div>\n'
+    html += '</div>\n'
+    html += '</div>\n'
+
+    html += '<div class="summary-col">\n'
+
+    # Top 5 slowest
+    non_root = [e for e in spans if e.get('depth', 0) > 0]
+    top = sorted(non_root, key=lambda e: e['end'] - e['start'], reverse=True)[:5]
+    if top:
+        html += '<h3>🔥 Top 5 slowest</h3>\n<table>\n'
+        html += '<tr><th>Block</th><th class="r">Time(ms)</th>'
+        if multi:
+            html += '<th>Worker</th>'
+        html += '</tr>\n'
+        for e in top:
+            ms = (e['end'] - e['start']) * 1000
+            tcls = _time_class(ms, total_ms)
+            html += f'<tr><td class="block">{_esc(e["name"])}</td>'
+            html += f'<td class="r {tcls}">{_fmt_metric(ms)}</td>'
+            if multi:
+                html += f'<td class="params">{_esc(e.get("thread_id", "?"))}</td>'
+            html += f'</tr>\n'
+        html += '</table>\n'
+    html += '</div>\n'
     html += '</div>\n'
 
     html += '</div>\n'
