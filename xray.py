@@ -366,7 +366,7 @@ class Xray:
 
     @classmethod
     def html_report(cls, task_id: str = None) -> str:
-        """Render HTML profiler report."""
+        """Render HTML profiler report. Requires Redis (cls._redis must be set)."""
         from xray_html import render_from_redis
         return render_from_redis(task_id or cls._tl().task_id, cls._redis)
 
