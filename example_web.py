@@ -27,6 +27,10 @@ app = Flask(__name__)
 r = redis.Redis(host='redis')
 
 
+class SearchContext:
+    pass
+
+
 # --- Middleware: auto-profile every request ---
 
 @app.before_request
@@ -93,7 +97,7 @@ def sim_db_query(table, where=None):
 
 
 def sim_es_search(index, query):
-    with Xray.i('ES::search', {'index': index, 'query': query}) as span:
+    with Xray.i('ES::search', {'index': index, 'query': query, 'context': SearchContext()}) as span:
         time.sleep(random.uniform(0.02, 0.06))
         hits = random.randint(0, 500)
         span.data({'hits': hits})

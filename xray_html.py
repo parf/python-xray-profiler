@@ -14,6 +14,11 @@ def _esc(s):
     return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
+def _json_default(value):
+    """Compact fallback serializer for non-JSON objects."""
+    return f'<{type(value).__name__}>'
+
+
 def _fmt_val(v) -> str:
     """Format a value with type-specific coloring."""
     if v is None:
@@ -31,7 +36,7 @@ def _fmt_val(v) -> str:
             return f'<span class="v-str">{short}<span class="v-ellipsis" title="{full}">…</span></span>'
         return f'<span class="v-str">{_esc(v)}</span>'
     # array, dict — render as JSON
-    return f'<span class="v-json">{_esc(json.dumps(v, separators=(", ", ": "), default=str))}</span>'
+    return f'<span class="v-json">{_esc(json.dumps(v, separators=(", ", ": "), default=_json_default))}</span>'
 
 
 def _fmt_data(data: dict) -> str:
@@ -164,7 +169,7 @@ CSS = '''
 .profiler-report .event-badge.warn { background: #f90; }
 .profiler-report .event-badge.alert { background: #c00; }
 .profiler-report .thread-sep td { background: #e8e8ff; font-weight: bold; padding: 4px 6px; }
-.profiler-report .coverage-wrap { margin: 2px 0 1px; }
+.profiler-report .coverage-wrap { margin: 2px 0 8px; }
 .profiler-report .coverage-thread { margin: 1px 0; }
 .profiler-report .coverage-row { display: flex; align-items: center; gap: 4px; margin: 0; }
 .profiler-report .coverage-track { position: relative; flex: 1; height: 6px; border: 1px solid #ddd; background: #fafafa; border-radius: 999px; overflow: hidden; }

@@ -2,6 +2,8 @@
 
 Implementation details, Redis format, and architecture.
 
+Version: `0.4.0`
+
 ## Redis Storage
 
 ```
@@ -105,6 +107,7 @@ P[15.2] out DB::query 15.2ms
 
 `Xray.html_report()` / web panel:
 - Call Tree table: %%, Block, Params, Mem(MB), Time(ms)
+- Right-side finish %% column to show when a block completed in total request time
 - Thread sections with colored backgrounds (multi-worker)
 - Root span shown as thread header (not separate row)
 - Typed params: bold keys, green strings, teal ints, blue bools, grey null
@@ -113,6 +116,7 @@ P[15.2] out DB::query 15.2ms
 - Color-coded timing: green < 50ms, yellow 50-100ms, red > 100ms
 - Warning ⚠ / Alert ‼ rows and bar badges
 - Top 5 slowest (excludes root spans)
+- Compact Gantt-like Coverage map grouped by worker/depth with per-span hover labels
 
 ## CLI Report
 

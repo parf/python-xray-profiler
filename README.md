@@ -2,6 +2,8 @@
 
 See through your code. Lightweight execution profiler for Python.
 
+Version: `0.4.0`
+
 Author: Serg Parf <sergey.porfiriev@gmail.com>
 
 ![Xray Web Report](screenshot.png)
@@ -34,7 +36,7 @@ and parameters. No decorators, no context managers, no refactoring needed.
 
 ### Reporting
 
-- **Web** — auto-injected HTML panel with Call Tree table, typed params, expand/collapse, color-coded timing, warning/alert badges
+- **Web** — auto-injected HTML panel with Call Tree table, typed params, expand/collapse, color-coded timing, warning/alert badges, and compact Gantt-like Coverage map
 - **JSON** — `/_profiler/json?k=KEY` endpoint returns raw entries as JSON
 - **CLI** — `Xray.report()` prints color-coded tree grouped by worker with Top 5 slowest
 - **CLI instant** — real-time stderr with nested outline, shows every `in`/`out` as it happens
@@ -177,6 +179,9 @@ Xray.report('other-task-id')       # specific task
 
 # HTML report (Call Tree table)
 html = Xray.html_report()          # returns HTML string
+
+# Semver version
+print(Xray.VERSION)                # '0.4.0'
 
 # JSON (sorted entries + summary stats)
 data = Xray.json()                 # {'task_id', 'total_ms', 'entries', 'spans', 'warnings', 'alerts', 'data': [...]}

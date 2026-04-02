@@ -40,11 +40,14 @@ import json
 import inspect
 import threading
 
+__version__ = '0.4.0'
+
 
 class Xray:
     # Shared (safe across threads)
     _redis = None
     _atexit_registered = False
+    VERSION = __version__
     TTL = 300  # Redis key expiry (seconds), override via init(ttl=)
 
     # Per-thread state (each thread/request gets its own)
@@ -400,7 +403,7 @@ class Xray:
             'caller': _caller_stack(3),
         }
         key = f'xray:{cls._tl().task_id}'
-        cls._redis.rpush(key, json.dumps(entry, default=str))
+        cls._redis.rpush(key, json.dumps(entry, default=_json_default))
         cls._redis.expire(key, cls.TTL)
 
 
@@ -473,7 +476,7 @@ class _InstantSpan:
         offset = (end - self._profiler._tl().start_time) * 1000
         lines = f'\033[2mP[{offset:.1f}] {indent}out {self._name} {duration_ms:.1f}ms\n{pad}{caller}'
         for k, v in (self._data or {}).items():
-            lines += f'\n{pad}{k}: {json.dumps(v, default=str)}'
+            lines += f'\n{pad}{k}: {json.dumps(v, default=_json_default)}'
         lines += '\033[0m'
         _stderr(lines)
         # Also push to Redis if available
@@ -494,6 +497,10 @@ class _NullSpan:
 
 
 # --- Helpers ---
+
+def _json_default(value):
+    """Compact fallback serializer for non-JSON objects."""
+    return f'<{type(value).__name__}>'
 
 def _caller_name(depth=2):
     """Auto-detect caller class.method or function name."""
