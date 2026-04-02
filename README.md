@@ -47,11 +47,19 @@ and parameters. No decorators, no context managers, no refactoring needed.
 from xray import Xray
 import redis
 
+# If you want profiling:
 Xray.init(redis.Redis(host='redis'))  # task_id auto-generated
 
-with Xray.i('ES::search', {'query': q}) as span:
+# If you do not want profiling:
+Xray.init(False)  # disabled mode
+
+# In disabled mode, Xray.i(), decorators, and patched methods become no-ops.
+# Overhead = ZERO, so instrumentation can stay in the code.
+
+# In enabled mode, overhead is minimal.
+with Xray.i('ES::search', {'query': q}):
     results = es.search(q)
-    span.data({'count': len(results)})
+    # work happens as usual; data is recorded only when profiling is enabled
 ```
 
 ## Spans (with duration)
@@ -155,6 +163,7 @@ Xray.alert('timeout', {'url': url, 'after_ms': 5000})
 Xray.init(redis_client)                          # task_id auto-generated
 Xray.init(redis_client, 'my-task-123')           # explicit task_id
 Xray.init(redis_client, thread_id='worker-1')    # explicit thread_id
+Xray.init(False)                                 # disabled mode (zero overhead)
 
 # Access current task_id
 print(Xray.task_id())                            # 'xray-a1b2c3d4' or 'my-task-123'
@@ -263,6 +272,32 @@ Open http://localhost:5000/ — auto-profiled page with execution panel at the b
 | `/api/search?q=miami` | JSON API (profiler key in `X-Xray-Key` header) |
 | `/_profiler?k=KEY` | Standalone HTML report |
 | `/_profiler/json?k=KEY` | Raw JSON entries |
+
+## Attach Profiler To Response
+
+Use `Xray.attach_profiler()` in web middleware when you want the library to:
+- close the current profiling session
+- inject the HTML profiler panel into HTML responses
+- add `X-Profiler-Key` and `X-Profiler-URL` headers
+
+Example:
+
+```python
+@app.after_request
+def attach_profiler(response):
+    task_id = request.environ.get('profiler_task_id')
+    if not task_id:
+        return response
+    return Xray.attach_profiler(
+        response,
+        task_id=task_id,
+        endpoint='/_profiler',
+        delay_ms=int(request.environ.get('profiler_delay_ms', 0)),
+        wait_iframes=bool(request.environ.get('profiler_wait_iframes', False)),
+    )
+```
+
+This keeps framework glue thin and moves profiler-specific response handling into the library.
 
 ## See Also
 

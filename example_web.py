@@ -21,7 +21,6 @@ import redis
 from flask import Flask, Response, request, jsonify
 
 from xray import Xray
-from xray_html import render_from_redis, snippet
 
 app = Flask(__name__)
 r = redis.Redis(host='redis')
@@ -47,24 +46,13 @@ def attach_profiler(response):
     task_id = request.environ.get('profiler_task_id')
     if not task_id:
         return response
-
-    Xray.finish()  # close root span (before response sent; atexit is fallback)
-
-    # HTML responses: inject profiler panel
-    if response.content_type and response.content_type.startswith('text/html'):
-        delay = int(request.environ.get('profiler_delay_ms', 0))
-        wait = bool(request.environ.get('profiler_wait_iframes', False))
-        elapsed = (time.time() - Xray._tl().start_time) * 1000 if Xray._tl().start_time else 0
-        entries = Xray.entries(task_id)
-        warns = sum(1 for e in entries if e.get('type') == 'warning')
-        alerts = sum(1 for e in entries if e.get('type') == 'alert')
-        html = snippet(task_id, delay_ms=delay, wait_iframes=wait, elapsed_ms=elapsed, warnings=warns, alerts=alerts)
-        response.data = response.data.replace(b'</body>', html.encode() + b'</body>')
-
-    # JSON/API responses: add profiler key as header
-    response.headers['X-Profiler-Key'] = task_id
-    response.headers['X-Profiler-URL'] = f'/_profiler?k={task_id}'
-    return response
+    return Xray.attach_profiler(
+        response,
+        task_id=task_id,
+        endpoint='/_profiler',
+        delay_ms=int(request.environ.get('profiler_delay_ms', 0)),
+        wait_iframes=bool(request.environ.get('profiler_wait_iframes', False)),
+    )
 
 
 # --- Profiler report endpoint ---
@@ -74,7 +62,8 @@ def profiler_view():
     task_id = request.args.get('k', '')
     if not task_id:
         return 'Missing ?k= parameter', 400
-    html = render_from_redis(task_id, r)
+    Xray._redis = r
+    html = Xray.html_report(task_id)
     return Response(html, content_type='text/html; charset=utf-8')
 
 
@@ -83,6 +72,7 @@ def profiler_json():
     task_id = request.args.get('k', '')
     if not task_id:
         return jsonify({'error': 'Missing ?k= parameter'}), 400
+    Xray._redis = r
     return jsonify(Xray.json(task_id))
 
 

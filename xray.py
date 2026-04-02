@@ -71,9 +71,22 @@ class Xray:
 
     @classmethod
     def init(cls, redis_client, task_id: str = None, thread_id: str = None, instant: bool = False, ttl: int = None):
-        """Init profiler for a task. Call once per task/request. task_id auto-generated if not set."""
+        """Init profiler for a task. Pass False to disable profiling explicitly."""
         if ttl is not None:
             cls.TTL = ttl
+        if redis_client is False:
+            cls._redis = None
+            tl = cls._tl()
+            if tl.root_span:
+                tl.root_span.__exit__(None, None, None)
+            tl.task_id = None
+            tl.thread_id = thread_id or threading.current_thread().name
+            tl.enabled = False
+            tl.instant = False
+            tl.start_time = 0
+            tl.stack = []
+            tl.root_span = None
+            return
         from uuid import uuid4
         cls._redis = redis_client
         tl = cls._tl()
@@ -384,6 +397,29 @@ class Xray:
         """JS snippet to inject into HTML page (async fetch + embed)."""
         from xray_html import snippet
         return snippet(cls._tl().task_id, endpoint)
+
+    @classmethod
+    def attach_profiler(cls, response, task_id: str = None, endpoint: str = '/_profiler', delay_ms: int = 0, wait_iframes: bool = False):
+        """Finish the current profiling session and attach profiler metadata/UI to a web response."""
+        tid = task_id or cls._tl().task_id
+        if not tid:
+            return response
+
+        cls.finish()
+
+        response.headers['X-Profiler-Key'] = tid
+        response.headers['X-Profiler-URL'] = f'{endpoint}?k={tid}'
+
+        if response.content_type and response.content_type.startswith('text/html'):
+            from xray_html import snippet
+            elapsed = (time.time() - cls._tl().start_time) * 1000 if cls._tl().start_time else 0
+            entries = cls.entries(tid)
+            warns = sum(1 for e in entries if e.get('type') == 'warning')
+            alerts = sum(1 for e in entries if e.get('type') == 'alert')
+            html = snippet(tid, endpoint=endpoint, delay_ms=delay_ms, wait_iframes=wait_iframes, elapsed_ms=elapsed, warnings=warns, alerts=alerts)
+            response.data = response.data.replace(b'</body>', html.encode() + b'</body>')
+
+        return response
 
     # --- Internal ---
 

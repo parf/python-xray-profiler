@@ -275,6 +275,19 @@ def test_disabled():
     cleanup(name)
 
 
+def test_init_false_disables():
+    name = 'init-false'
+    cleanup(name)
+    Xray.init(False)
+    with Xray.i('should-not-appear'):
+        pass
+    Xray.info('also-not')
+
+    check('init(false): task_id empty', Xray.task_id() == '', f'got {Xray.task_id()}')
+    check('init(false): no redis entries', entries(name) == [])
+    cleanup(name)
+
+
 def test_sort_order():
     name = 'sort-order'
     cleanup(name)
@@ -383,6 +396,7 @@ if __name__ == '__main__':
         test_trace_class_private,
         test_thread_local,
         test_disabled,
+        test_init_false_disables,
         test_sort_order,
         test_patch_single,
         test_patch_multiple,
