@@ -3,11 +3,17 @@
 Multi-process profiler example.
 
 Spawns 3 worker processes writing to the same task-id,
-then reads back and prints an execution report.
+then reads back and prints a grouped CLI execution report.
+
+What this demo shows:
+  - multiple workers writing to one Redis-backed trace
+  - per-worker root spans and nested child spans
+  - request/response payload capture
+  - warning/alert events in the same execution timeline
 
 Usage:
-    python3 example_multiprocess.py              # Redis mode + report
-    python3 example_multiprocess.py --instant    # Instant stderr output (like PHP --profiler=echo)
+    python3 example_multiprocess.py --default    # Redis mode + grouped CLI report
+    python3 example_multiprocess.py --instant    # Instant stderr output
 """
 
 import json
@@ -77,10 +83,7 @@ def worker(worker_id: int, instant: bool = False):
 
 if __name__ == '__main__':
     if not INSTANT and '--default' not in sys.argv:
-        print('Multi-process profiler example.\n')
-        print('Usage:')
-        print('  python3 example_multiprocess.py --default    Redis mode: 3 workers + report')
-        print('  python3 example_multiprocess.py --instant    Instant mode: real-time stderr output')
+        print(__doc__.strip())
         sys.exit(0)
 
     mode = 'INSTANT (stderr)' if INSTANT else 'Redis'
