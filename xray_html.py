@@ -114,6 +114,7 @@ CSS = '''
 .profiler-report table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: auto;
 }
 .profiler-report th {
     background: #f5f5f5;
@@ -132,6 +133,10 @@ CSS = '''
 }
 .profiler-report td.r { text-align: right; }
 .profiler-report tr:hover { background: #f8f8f0; }
+.profiler-report th.block-col,
+.profiler-report td.block-col { width: 1%; white-space: nowrap; }
+.profiler-report th.params-col,
+.profiler-report td.params-col { width: 100%; }
 .profiler-report .block { font-weight: bold; color: #333; }
 .profiler-report .params { color: #888; font-weight: normal; max-width: 700px; word-break: break-all; white-space: normal; }
 .profiler-report .metric-frac { font-size: 8px; vertical-align: 1px; }
@@ -198,7 +203,7 @@ def render(entries: list, task_id: str = '') -> str:
         worker_bg[tid] = worker_colors[i % len(worker_colors)]
 
     cols = 5
-    html += '<tr><th class="r" title="% from start">%%</th><th>Block</th><th>Params</th><th class="r"><small>Mem(MB)</small></th><th class="r">Time(ms)</th><th class="r" title="% when finished">%%</th></tr>\n'
+    html += '<tr><th class="r" title="% from start">%%</th><th class="block-col">Block</th><th class="params-col">Params</th><th class="r"><small>Mem(MB)</small></th><th class="r">Time(ms)</th><th class="r" title="% when finished">%%</th></tr>\n'
 
     for tid in sorted(threads):
         thread_entries = threads[tid]
@@ -224,8 +229,8 @@ def render(entries: list, task_id: str = '') -> str:
         bg = f' style="background:{worker_bg[tid]}"' if multi else ''
         html += f'<tr class="thread-sep"{bg}>'
         html += f'<td class="r start-col" title="{thread_start_offset:,.1f}ms from start">{_fmt_metric(thread_start_pct)}</td>'
-        html += f'<td><b>{_esc(tid)}</b></td>'
-        html += f'<td class="params">{len(thread_entries)} entries</td>'
+        html += f'<td class="block-col"><b>{_esc(tid)}</b></td>'
+        html += f'<td class="params params-col">{len(thread_entries)} entries</td>'
         html += f'<td class="r">{thread_mem_str}</td>'
         html += f'<td class="r {tcls}">{_fmt_metric(thread_total)}</td>'
         html += f'<td class="r start-col" title="{thread_end_offset:,.1f}ms from start">{_fmt_metric(thread_end_pct)}</td>'
@@ -268,8 +273,8 @@ def render(entries: list, task_id: str = '') -> str:
 
                 html += f'<tr{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
-                html += f'<td>{indent}<span class="block">{_esc(e["name"])}</span></td>'
-                html += f'<td class="params">{params}</td>'
+                html += f'<td class="block-col">{indent}<span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="params params-col">{params}</td>'
                 html += f'<td class="r">{mem_mb}</td>'
                 html += f'<td class="r {tcls}">{_fmt_metric(ms)}</td>'
                 html += f'<td class="r start-col" title="{end_offset:,.1f}ms from start">{_fmt_metric(end_pct)}</td>'
@@ -282,8 +287,8 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="warn-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
-                html += f'<td>{indent}<span class="event-badge warn">⚠</span><span class="block">{_esc(e["name"])}</span></td>'
-                html += f'<td class="params">{params}</td>'
+                html += f'<td class="block-col">{indent}<span class="event-badge warn">⚠</span><span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="params params-col">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
 
             elif e['type'] == 'alert':
@@ -293,8 +298,8 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="alert-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
-                html += f'<td>{indent}<span class="event-badge alert">‼</span><span class="block">{_esc(e["name"])}</span></td>'
-                html += f'<td class="params">{params}</td>'
+                html += f'<td class="block-col">{indent}<span class="event-badge alert">‼</span><span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="params params-col">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
 
             else:  # info
@@ -304,8 +309,8 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="info-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
-                html += f'<td>{indent}· <span class="block">{_esc(e["name"])}</span></td>'
-                html += f'<td class="params">{params}</td>'
+                html += f'<td class="block-col">{indent}· <span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="params params-col">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
 
     html += '</table>\n'
