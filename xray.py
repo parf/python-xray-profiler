@@ -44,6 +44,7 @@ import threading
 class Xray:
     # Shared (safe across threads)
     _redis = None
+    _atexit_registered = False
     TTL = 300  # Redis key expiry (seconds), override via init(ttl=)
 
     # Per-thread state (each thread/request gets its own)
@@ -85,7 +86,9 @@ class Xray:
         # Auto-create root span — all subsequent spans are children
         tl.root_span = cls.i(thread_id or 'PROFILER')
         tl.root_span.__enter__()
-        atexit.register(cls.finish)
+        if not cls._atexit_registered:
+            atexit.register(cls.finish)
+            cls._atexit_registered = True
 
     @classmethod
     def init_instant(cls, thread_id: str = None):
@@ -103,7 +106,9 @@ class Xray:
         _stderr(f'P[0.0] \033[1minit\033[0m instant')
         tl.root_span = cls.i(thread_id or 'PROFILER')
         tl.root_span.__enter__()
-        atexit.register(cls.finish)
+        if not cls._atexit_registered:
+            atexit.register(cls.finish)
+            cls._atexit_registered = True
 
     @classmethod
     def task_id(cls) -> str:
@@ -161,13 +166,13 @@ class Xray:
     @classmethod
     def profile(cls, name: str = None):
         """Decorator: @Xray.profile() or @Xray.profile('custom-name')"""
+        import functools
         def decorator(fn):
             label = name or fn.__qualname__
+            @functools.wraps(fn)
             def wrapper(*args, **kwargs):
                 with cls.i(label):
                     return fn(*args, **kwargs)
-            wrapper.__name__ = fn.__name__
-            wrapper.__qualname__ = fn.__qualname__
             return wrapper
         return decorator
 
@@ -223,6 +228,8 @@ class Xray:
             attr = getattr(target_class, attr_name, None)
             if not callable(attr):
                 continue
+            if getattr(attr, '_xray_patched', False):
+                continue  # already patched — idempotent
             label = f'{target_class.__name__}.{attr_name}'
             original = attr
 
@@ -231,6 +238,7 @@ class Xray:
                 with cls.i(_xray_label):
                     return _xray_fn(*args, **kwargs)
 
+            wrapper._xray_patched = True
             setattr(target_class, attr_name, wrapper)
 
     # --- Closure helper ---
