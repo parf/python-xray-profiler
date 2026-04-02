@@ -334,16 +334,8 @@ def render(entries: list, task_id: str = '') -> str:
     html += '</table>\n'
 
     html += '<div class="summary-grid">\n'
-    coverage_totals = []
-    for tid in sorted(threads):
-        thread_spans = [
-            e for e in threads[tid]
-            if e['type'] == 'span' and e.get('end') and e.get('depth', 0) > 0
-        ]
-        if not thread_spans:
-            continue
-        coverage_totals.append(_merged_duration_ms(thread_spans))
-    overall_coverage_pct = (sum(coverage_totals) / ((total_ms or 1) * max(len(coverage_totals), 1))) * 100 if coverage_totals else 0
+    all_non_root_spans = [e for e in spans if e.get('depth', 0) > 0]
+    overall_coverage_pct = (_merged_duration_ms(all_non_root_spans) / (total_ms or 1)) * 100 if all_non_root_spans else 0
 
     html += '<div class="summary-col">\n'
     html += f'<h3>▦ Coverage <small>{overall_coverage_pct:.1f}%</small></h3>\n<div class="coverage-wrap">\n'
