@@ -49,6 +49,14 @@ def _fmt_data(data: dict) -> str:
     return ', '.join(parts)
 
 
+def _caller_title(entry: dict) -> str:
+    """Format stored call places for an HTML title tooltip."""
+    caller = entry.get('caller') or []
+    if not caller:
+        return ''
+    return ' title="' + _esc(' \n'.join(caller)).replace('\n', '&#10;') + '"'
+
+
 _TRUNC_ID = 0
 
 def _truncatable(content: str, max_len: int = 200) -> str:
@@ -283,7 +291,7 @@ def render(entries: list, task_id: str = '') -> str:
 
                 html += f'<tr{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
-                html += f'<td class="block-col">{indent}<span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="block-col">{indent}<span class="block"{_caller_title(e)}>{_esc(e["name"])}</span></td>'
                 html += f'<td class="params params-col">{params}</td>'
                 html += f'<td class="r">{mem_mb}</td>'
                 html += f'<td class="r {tcls}">{_fmt_metric(ms)}</td>'
@@ -297,7 +305,7 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="warn-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
-                html += f'<td class="block-col">{indent}<span class="event-badge warn">⚠</span><span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="block-col">{indent}<span class="event-badge warn">⚠</span><span class="block"{_caller_title(e)}>{_esc(e["name"])}</span></td>'
                 html += f'<td class="params params-col">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
 
@@ -308,7 +316,7 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="alert-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
-                html += f'<td class="block-col">{indent}<span class="event-badge alert">‼</span><span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="block-col">{indent}<span class="event-badge alert">‼</span><span class="block"{_caller_title(e)}>{_esc(e["name"])}</span></td>'
                 html += f'<td class="params params-col">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
 
@@ -319,7 +327,7 @@ def render(entries: list, task_id: str = '') -> str:
                 bg = f' style="background:{worker_bg[tid]}"' if multi else ''
                 html += f'<tr class="info-row"{bg}>'
                 html += f'<td class="r start-col" title="{start_offset:,.1f}ms from start">{_fmt_metric(start_pct)}</td>'
-                html += f'<td class="block-col">{indent}· <span class="block">{_esc(e["name"])}</span></td>'
+                html += f'<td class="block-col">{indent}· <span class="block"{_caller_title(e)}>{_esc(e["name"])}</span></td>'
                 html += f'<td class="params params-col">{params}</td>'
                 html += f'<td colspan="{rest}"></td></tr>\n'
 
