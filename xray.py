@@ -185,6 +185,9 @@ class Xray:
         @Xray.trace_class()                          # all public methods
         @Xray.trace_class(methods=['find', 'save'])   # specific methods only
         @Xray.trace_class(skip_private=False)          # include _private too
+
+        Note: async methods will lose coroutine detection after wrapping
+        (inspect.iscoroutinefunction() returns False). Use with Xray.i() manually for async.
         """
         def decorator(klass):
             import functools
@@ -218,6 +221,9 @@ class Xray:
         Xray.patch(Elasticsearch, 'search')                    # single method
         Xray.patch(Elasticsearch, ['search', 'index'])         # multiple methods
         Xray.patch(Elasticsearch)                               # all public methods
+
+        Note: async methods will lose coroutine detection after wrapping
+        (inspect.iscoroutinefunction() returns False). Use with Xray.i() manually for async.
         """
         import functools
         if isinstance(methods, str):
