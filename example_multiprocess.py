@@ -12,8 +12,9 @@ What this demo shows:
   - warning/alert events in the same execution timeline
 
 Usage:
-    python3 example_multiprocess.py --default    # Redis mode + grouped CLI report
+    python3 example_multiprocess.py --redis      # Redis mode + grouped CLI report
     python3 example_multiprocess.py --instant    # Instant stderr output
+    python3 example_multiprocess.py --none       # No-op mode (no init, no profiler output)
 """
 
 import json
@@ -29,11 +30,15 @@ from xray import Xray
 REDIS_HOST = 'redis'
 TASK_ID = f'example-{int(time.time())}'
 INSTANT = '--instant' in sys.argv
+NONE = '--none' in sys.argv
+REDIS = '--redis' in sys.argv
 
 
-def worker(worker_id: int, instant: bool = False):
+def worker(worker_id: int, instant: bool = False, none: bool = False):
     """Simulates a Celery worker doing mixed work."""
-    if instant:
+    if none:
+        pass
+    elif instant:
         Xray.init_instant(thread_id=f'worker-{worker_id}')
     else:
         r = redis.Redis(host=REDIS_HOST)
@@ -82,14 +87,18 @@ def worker(worker_id: int, instant: bool = False):
 
 
 if __name__ == '__main__':
-    if not INSTANT and '--default' not in sys.argv:
+    if not INSTANT and not NONE and not REDIS:
         print(__doc__.strip())
         sys.exit(0)
 
-    mode = 'INSTANT (stderr)' if INSTANT else 'Redis'
+    mode = 'NONE (no-op)' if NONE else 'INSTANT (stderr)' if INSTANT else 'Redis'
     print(f'Mode: {mode} | Task ID: {TASK_ID}')
 
-    if INSTANT:
+    if NONE:
+        print('Running single worker with profiler OFF...\n')
+        worker(0, none=True)
+        print('\nDone. No profiler output is expected in this mode.')
+    elif INSTANT:
         # Single process for instant — stderr output is sequential
         print('Running single worker in instant mode...\n')
         worker(0, instant=True)

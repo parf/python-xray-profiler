@@ -2,7 +2,7 @@
 
 See through your code. Lightweight execution profiler for Python.
 
-Version: `0.4.0`
+Version: `0.5.0`
 
 Author: Serg Parf <sergey.porfiriev@gmail.com>
 
@@ -192,7 +192,7 @@ Xray.report('other-task-id')       # specific task
 html = Xray.html_report()          # returns HTML string
 
 # Semver version
-print(Xray.VERSION)                # '0.4.0'
+print(Xray.VERSION)                # '0.5.0'
 
 # JSON (sorted entries + summary stats)
 data = Xray.json()                 # {'task_id', 'total_ms', 'entries', 'spans', 'warnings', 'alerts', 'data': [...]}
