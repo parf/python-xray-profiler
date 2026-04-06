@@ -105,6 +105,19 @@ def _fmt_metric(value: float) -> str:
     return f'{whole}<span class="metric-frac">.{frac}</span>'
 
 
+def _fmt_time_metric(ms: float) -> str:
+    """Render time in ms with decimals only for very small values."""
+    if ms >= 1000:
+        return f'<span class="time-seconds">{ms / 1000:.1f}s</span>'
+    if ms < 100:
+        if ms < 5:
+            return f'<span class="time-small">{_fmt_metric(ms)}</span>'
+        return f'<span class="time-small">{int(round(ms))}</span>'
+    if ms < 5:
+        return _fmt_metric(ms)
+    return f'{int(round(ms))}'
+
+
 CSS = '''
 <style>
 .profiler-report {
@@ -150,7 +163,7 @@ CSS = '''
 .profiler-report td.block-col { width: 1%; white-space: nowrap; }
 .profiler-report th.params-col,
 .profiler-report td.params-col { width: 100%; }
-.profiler-report .block { font-weight: bold; color: #333; }
+.profiler-report .block { font-weight: bold; color: #333; cursor: help; }
 .profiler-report .params { color: #888; font-weight: normal; max-width: 700px; word-break: break-all; white-space: normal; }
 .profiler-report .metric-frac { font-size: 8px; vertical-align: 1px; }
 .profiler-report .truncated { display: inline; }
@@ -167,6 +180,8 @@ CSS = '''
 .profiler-report .indent { color: #ccc; }
 .profiler-report .time-red { background: #fcc; }
 .profiler-report .time-yellow { background: #ffc; }
+.profiler-report .time-small { font-size: 11px; }
+.profiler-report .time-seconds { display: inline-block; padding: 0 4px; border-radius: 3px; background: #ff0; font-weight: bold; font-size: 13px; color: #f00; }
 .profiler-report .warn-row { color: #b8860b; }
 .profiler-report .warn-row .block { color: #b8860b; }
 .profiler-report .alert-row { color: #c00; font-weight: bold; }
@@ -250,7 +265,7 @@ def render(entries: list, task_id: str = '') -> str:
         html += f'<td class="block-col"><b>{_esc(tid)}</b></td>'
         html += f'<td class="params params-col">{len(thread_entries)} entries</td>'
         html += f'<td class="r">{thread_mem_str}</td>'
-        html += f'<td class="r {tcls}">{_fmt_metric(thread_total)}</td>'
+        html += f'<td class="r {tcls}">{_fmt_time_metric(thread_total)}</td>'
         html += f'<td class="r start-col" title="{thread_end_offset:,.1f}ms from start">{_fmt_metric(thread_end_pct)}</td>'
         html += f'</tr>\n'
 
@@ -294,7 +309,7 @@ def render(entries: list, task_id: str = '') -> str:
                 html += f'<td class="block-col">{indent}<span class="block"{_caller_title(e)}>{_esc(e["name"])}</span></td>'
                 html += f'<td class="params params-col">{params}</td>'
                 html += f'<td class="r">{mem_mb}</td>'
-                html += f'<td class="r {tcls}">{_fmt_metric(ms)}</td>'
+                html += f'<td class="r {tcls}">{_fmt_time_metric(ms)}</td>'
                 html += f'<td class="r start-col" title="{end_offset:,.1f}ms from start">{_fmt_metric(end_pct)}</td>'
                 html += f'</tr>\n'
 
@@ -385,8 +400,8 @@ def render(entries: list, task_id: str = '') -> str:
         for e in top:
             ms = (e['end'] - e['start']) * 1000
             tcls = _time_class(ms, total_ms)
-            html += f'<tr><td class="block">{_esc(e["name"])}</td>'
-            html += f'<td class="r {tcls}">{_fmt_metric(ms)}</td>'
+            html += f'<tr><td><span class="block"{_caller_title(e)}>{_esc(e["name"])}</span></td>'
+            html += f'<td class="r {tcls}">{_fmt_time_metric(ms)}</td>'
             if multi:
                 html += f'<td class="params">{_esc(e.get("thread_id", "?"))}</td>'
             html += f'</tr>\n'

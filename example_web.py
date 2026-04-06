@@ -143,6 +143,10 @@ def index():
 
         classification = sim_ai_classify('Office space in Miami')
 
+        with Xray.i('API::slow-sync', {'provider': 'crm', 'batch': 25}) as sync:
+            time.sleep(1.2)
+            sync.data({'updated': 23, 'skipped': 2})
+
         Xray.warning('slow-query', {'ms': 320})
         Xray.alert('connection-timeout', {'host': 'es-cluster', 'after_ms': 5000})
 
@@ -170,6 +174,7 @@ def index():
             <li>🔎 <b>Elasticsearch</b> found {results['hits']} matching results</li>
             <li>🌍 <b>Geocoding + Classification</b> enriched a sample property</li>
             <li>🤖 <b>AI classify</b> analyzed "Office space in Miami" with request/response</li>
+            <li>🐢 <b>Slow sync</b> simulates a long external call (&gt; 1s)</li>
             <li>⚠️ A simulated <b>slow query warning</b> and ‼️ <b>timeout alert</b></li>
         </ul>
     </div>
