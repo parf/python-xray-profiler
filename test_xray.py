@@ -288,6 +288,41 @@ def test_init_false_disables():
     cleanup(name)
 
 
+def test_no_init_is_noop():
+    name = 'no-init'
+    cleanup(name)
+    result_box = {}
+
+    def worker():
+        @Xray.profile()
+        def twice(x):
+            return x * 2
+
+        class Client:
+            def ping(self):
+                return 'pong'
+
+        Xray.patch(Client, methods=['ping'])
+
+        with Xray.i('should-not-appear'):
+            result_box['span'] = True
+        Xray.info('also-not')
+        result_box['decorator'] = twice(21)
+        result_box['patch'] = Client().ping()
+        result_box['task_id'] = Xray.task_id()
+
+    t = threading.Thread(target=worker, name='no-init-worker')
+    t.start()
+    t.join()
+
+    check('no-init: code still runs', result_box.get('span') is True)
+    check('no-init: decorator still works', result_box.get('decorator') == 42)
+    check('no-init: patched method still works', result_box.get('patch') == 'pong')
+    check('no-init: task_id empty', result_box.get('task_id') == '', f"got {result_box.get('task_id')}")
+    check('no-init: no redis entries', entries(name) == [])
+    cleanup(name)
+
+
 def test_sort_order():
     name = 'sort-order'
     cleanup(name)
@@ -397,6 +432,7 @@ if __name__ == '__main__':
         test_thread_local,
         test_disabled,
         test_init_false_disables,
+        test_no_init_is_noop,
         test_sort_order,
         test_patch_single,
         test_patch_multiple,

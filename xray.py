@@ -8,6 +8,9 @@ Usage:
     from xray import Xray
     import redis
 
+    # Init only when you want profiling ON.
+    # Without init(), Xray APIs behave as safe no-ops.
+
     # Redis mode — store in Redis list
     Xray.init(redis.Redis(), 'task-123')
 
@@ -275,18 +278,19 @@ class Xray:
     # --- Report ---
 
     @classmethod
-    def entries(cls, task_id: str = None) -> list:
+    def entries(cls, task_id: str = None, redis_client=None) -> list:
         """Read all profiler entries from Redis for a task."""
-        if not cls._redis:
+        client = redis_client or cls._redis
+        if not client:
             return []
         key = f'xray:{task_id or cls._tl().task_id}'
-        return [json.loads(e) for e in cls._redis.lrange(key, 0, -1)]
+        return [json.loads(e) for e in client.lrange(key, 0, -1)]
 
     @classmethod
-    def json(cls, task_id: str = None) -> dict:
+    def json(cls, task_id: str = None, redis_client=None) -> dict:
         """Return sorted entries as a dict ready for JSON serialization."""
         tid = task_id or cls._tl().task_id
-        entries = cls.entries(tid)
+        entries = cls.entries(tid, redis_client=redis_client)
         entries.sort(key=lambda e: e.get('start') or 0)
         spans = [e for e in entries if e['type'] == 'span' and e.get('end')]
         first_start = min((e.get('start') or 9e12) for e in entries) if entries else 0
@@ -387,10 +391,10 @@ class Xray:
     # --- HTML Report ---
 
     @classmethod
-    def html_report(cls, task_id: str = None) -> str:
-        """Render HTML profiler report. Requires Redis (cls._redis must be set)."""
+    def html_report(cls, task_id: str = None, redis_client=None) -> str:
+        """Render HTML profiler report from Redis."""
         from xray_html import render_from_redis
-        return render_from_redis(task_id or cls._tl().task_id, cls._redis)
+        return render_from_redis(task_id or cls._tl().task_id, redis_client or cls._redis)
 
     @classmethod
     def html_snippet(cls, endpoint: str = '/_profiler') -> str:

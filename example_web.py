@@ -60,8 +60,7 @@ def profiler_view():
     task_id = request.args.get('k', '')
     if not task_id:
         return 'Missing ?k= parameter', 400
-    Xray._redis = r
-    html = Xray.html_report(task_id)
+    html = Xray.html_report(task_id, redis_client=r)
     return Response(html, content_type='text/html; charset=utf-8')
 
 
@@ -70,8 +69,7 @@ def profiler_json():
     task_id = request.args.get('k', '')
     if not task_id:
         return jsonify({'error': 'Missing ?k= parameter'}), 400
-    Xray._redis = r
-    return jsonify(Xray.json(task_id))
+    return jsonify(Xray.json(task_id, redis_client=r))
 
 
 # --- Simulated operations ---

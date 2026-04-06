@@ -51,9 +51,11 @@ import redis
 Xray.init(redis.Redis(host='redis'))  # task_id auto-generated
 
 # If you do not want profiling:
-Xray.init(False)  # disabled mode
+# do nothing, or call Xray.init(False) explicitly
 
-# In disabled mode, Xray.i(), decorators, and patched methods become no-ops.
+# Xray.init() is only needed when you want profiling ON.
+# Without init(), Xray.i(), decorators, and patched methods are safe no-ops.
+# Xray.init(False) is the explicit equivalent.
 # Overhead = ZERO, so instrumentation can stay in the code.
 
 # In enabled mode, overhead is minimal.
@@ -163,7 +165,7 @@ Xray.alert('timeout', {'url': url, 'after_ms': 5000})
 Xray.init(redis_client)                          # task_id auto-generated
 Xray.init(redis_client, 'my-task-123')           # explicit task_id
 Xray.init(redis_client, thread_id='worker-1')    # explicit thread_id
-Xray.init(False)                                 # disabled mode (zero overhead)
+Xray.init(False)                                 # explicit disabled mode (same as "not initialized")
 
 # Access current task_id
 print(Xray.task_id())                            # 'xray-a1b2c3d4' or 'my-task-123'
@@ -285,7 +287,8 @@ def start_profiler():
     # ON/OFF logic example:
     # want_xray = isDeveloper()  # turn ON for developers, OFF for visitors
     want_xray = False if request.path.startswith('/_profiler') else True
-    Xray.init(redis_client if want_xray else False)  # task_id auto-generated when enabled
+    if want_xray:
+        Xray.init(redis_client)  # task_id auto-generated
 
 @app.after_request
 def attach_profiler(response):
@@ -307,8 +310,7 @@ def profiler_view():
     task_id = request.args.get('k', '')
     if not task_id:
         return 'Missing ?k= parameter', 400
-    Xray._redis = redis_client
-    return Xray.html_report(task_id)
+    return Xray.html_report(task_id, redis_client=redis_client)
 ```
 
 ## See Also
