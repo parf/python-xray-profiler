@@ -79,6 +79,20 @@ with Xray.i() as span:
 
 When profiler is disabled, `Xray.i()` returns a no-op — safe to use without checks.
 
+Special `data` keys:
+- `request`
+- `response`
+
+They are only special for report presentation.
+In the web/CLI reports, these two keys are rendered separately instead of being mixed into the inline `data` fields.
+Storage, JSON output, and profiler semantics stay exactly the same as for any other `data` keys.
+
+```python
+with Xray.i('AI::classify', {'request': {'text': q, 'model': 'gpt-4o-mini'}}) as span:
+    resp = classify(q)
+    span.data({'response': resp})
+```
+
 ## Decorator
 
 ```python

@@ -118,6 +118,15 @@ P[15.2] out DB::query 15.2ms
 - Top 5 slowest (excludes root spans)
 - Compact Gantt-like Coverage map grouped by worker/depth with per-span hover labels
 
+Special visual keys in `data`:
+- `request`
+- `response`
+
+These keys are not special in storage format or profiler semantics.
+They are only special in report presentation:
+- HTML: shown as expandable sections inside the `Params` cell
+- CLI: shown on separate `request:` / `response:` lines
+
 ## CLI Report
 
 `Xray.report()`:
