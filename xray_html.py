@@ -233,6 +233,24 @@ CSS = '''
 '''
 
 
+EXPAND_JS = r'''
+function ensureXrayExpandHandler() {
+    if (window.__xrayExpandHandlerBound) return;
+    document.addEventListener("click", function(e) {
+        if (!e.target.classList.contains("expand-btn")) return;
+        var t = document.getElementById(e.target.getAttribute("data-target"));
+        if (!t) return;
+        t.classList.toggle("expanded");
+        var exp = t.classList.contains("expanded");
+        var txt = e.target.textContent;
+        if (txt === "[+]" || txt === "[-]") e.target.textContent = exp ? "[-]" : "[+]";
+        else e.target.textContent = exp ? "\u25be" : "\u25b8";
+    });
+    window.__xrayExpandHandlerBound = true;
+}
+'''
+
+
 def render(entries: list, task_id: str = '') -> str:
     global _TRUNC_ID
     if not entries:
@@ -435,6 +453,8 @@ def render(entries: list, task_id: str = '') -> str:
     html += '</div>\n'
 
     html += '</div>\n'
+
+    html += f'<script>{EXPAND_JS}ensureXrayExpandHandler();</script>\n'
     return html
 
 
@@ -484,6 +504,8 @@ def snippet(task_id: str, endpoint: str = '/_profiler', delay_ms: int = 0, wait_
 </div>
 <script>
 (function() {{
+    {EXPAND_JS}
+    ensureXrayExpandHandler();
     document.getElementById("profiler-bar").addEventListener("click", function(e) {{
         if (e.target.tagName === "A") return;
         var b = document.getElementById("profiler-body");
@@ -495,18 +517,6 @@ def snippet(task_id: str, endpoint: str = '/_profiler', delay_ms: int = 0, wait_
             .then(function(html) {{ document.getElementById("profiler-body").innerHTML = html; }});
     }}
     {_snippet_load_strategy(delay_ms, wait_iframes)}
-    document.addEventListener("click", function(e) {{
-        if (e.target.classList.contains("expand-btn")) {{
-            var t = document.getElementById(e.target.getAttribute("data-target"));
-            if (t) {{
-                t.classList.toggle("expanded");
-                var exp = t.classList.contains("expanded");
-                var txt = e.target.textContent;
-                if (txt === "[+]" || txt === "[-]") e.target.textContent = exp ? "[-]" : "[+]";
-                else e.target.textContent = exp ? "\\u25be" : "\\u25b8";
-            }}
-        }}
-    }});
 }})();
 </script>
 '''
